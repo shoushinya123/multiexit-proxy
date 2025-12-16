@@ -1,0 +1,40 @@
+server:
+  listen: ":443"
+  tls:
+    cert: "/path/to/cert.pem"
+    key: "/path/to/key.pem"
+    sni_fake: true
+    fake_snis:
+      - "cloudflare.com"
+      - "google.com"
+      - "github.com"
+
+auth:
+  method: "psk"
+  key: "your-secret-key-change-this"
+
+exit_ips:
+  - "1.2.3.4"
+  - "5.6.7.8"
+  - "9.10.11.12"
+
+strategy:
+  type: "round_robin"  # round_robin, port_based, destination_based
+  # 如果type是port_based，取消下面的注释:
+  # port_ranges:
+  #   - range: "0-32767"
+  #     ip: "1.2.3.4"
+  #   - range: "32768-65535"
+  #     ip: "5.6.7.8"
+
+snat:
+  enabled: true
+  gateway: "192.168.1.1"  # 网关地址，需要根据实际情况修改
+  interface: "eth0"       # 网络接口，需要根据实际情况修改
+
+logging:
+  level: "info"
+  file: "/var/log/multiexit-proxy.log"
+
+
+

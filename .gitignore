@@ -1,0 +1,65 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+multiexit-proxy-server
+multiexit-proxy-client
+server
+client
+handler
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+*.log.*
+
+# Config files with secrets (keep examples)
+configs/server.yaml
+configs/client.json
+!configs/server.yaml.example
+!configs/client.json.example
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+!*.pem.example
+
+# PID files
+*.pid
+
+# Deployment directories
+deploy/
+!deploy/.gitkeep
+
+# Build artifacts
+*.zip
+*.tar.gz
+
+# Temporary files
+tmp/
+temp/

@@ -1,0 +1,19 @@
+{
+  "server": {
+    "address": "your-server.com:443",
+    "sni": "cloudflare.com"
+  },
+  "auth": {
+    "key": "your-secret-key-change-this"
+  },
+  "local": {
+    "socks5": "127.0.0.1:1080",
+    "http": "127.0.0.1:8080"
+  },
+  "logging": {
+    "level": "info"
+  }
+}
+
+
+
