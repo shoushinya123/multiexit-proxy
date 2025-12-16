@@ -52,6 +52,12 @@ type ServerConfig struct {
 		Username string `yaml:"username"`
 		Password string `yaml:"password"`
 	} `yaml:"web"`
+
+	// Trojan协议支持
+	Trojan struct {
+		Enabled  bool   `yaml:"enabled"`
+		Password string `yaml:"password"`
+	} `yaml:"trojan"`
 }
 
 // ClientConfig 客户端配置

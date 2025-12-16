@@ -1,0 +1,17 @@
+{
+  "server": {
+    "address": "your-server.com:443",
+    "sni": "your-server.com"
+  },
+  "auth": {
+    "key": "your-trojan-password-here"
+  },
+  "local": {
+    "socks5": "127.0.0.1:1080",
+    "http": "127.0.0.1:8080"
+  },
+  "logging": {
+    "level": "info"
+  }
+}
+

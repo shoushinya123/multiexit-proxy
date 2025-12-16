@@ -7,6 +7,7 @@
 - ✅ **多出口IP管理**：支持多个公网IP，实现SNAT源地址转换
 - ✅ **多种分配策略**：轮询、按端口、按目标地址分配
 - ✅ **加密传输**：TLS 1.3 + 自定义AEAD加密（ChaCha20-Poly1305）
+- ✅ **Trojan协议支持**：兼容标准Trojan协议，流量更隐蔽
 - ✅ **流量混淆**：TLS SNI伪装、包大小混淆、时间混淆
 - ✅ **SOCKS5/HTTP代理**：支持标准代理协议
 - ✅ **Web管理界面**：可视化管理和监控
@@ -30,6 +31,22 @@
 ```
 
 ## 🚀 快速开始
+
+### 协议选择
+
+系统支持两种协议模式：
+
+1. **自定义协议**（默认）：TLS + AEAD加密
+   ```bash
+   ./server -config configs/server.yaml
+   ./client -config configs/client.json
+   ```
+
+2. **Trojan协议**：标准Trojan协议，兼容性更好
+   ```bash
+   ./trojan-server -config configs/server-trojan.yaml
+   ./trojan-client -config configs/client-trojan.json
+   ```
 
 ### 服务端部署
 
@@ -74,6 +91,7 @@ sudo systemctl start multiexit-proxy
 - [使用说明](USAGE.md) - 详细使用指南
 - [测试指南](TESTING.md) - 客户端代理测试
 - [订阅功能](SUBSCRIPTION.md) - 订阅功能说明
+- [Trojan协议](TROJAN.md) - Trojan协议使用指南
 - [部署指南](DEPLOYMENT.md) - 部署文档
 
 ## 🔧 技术栈
