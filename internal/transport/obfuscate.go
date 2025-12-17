@@ -20,6 +20,3 @@ func AddRandomDelay() {
 	delay := time.Duration(rand.Intn(100)) * time.Millisecond
 	time.Sleep(delay)
 }
-
-
-

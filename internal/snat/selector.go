@@ -138,8 +138,13 @@ func (d *DestinationBasedSelector) SelectIP(targetAddr string, targetPort int) (
 	// 使用目标地址和端口计算哈希
 	key := fmt.Sprintf("%s:%d", targetAddr, targetPort)
 	hash := sha256.Sum256([]byte(key))
-	index := int(binary.BigEndian.Uint64(hash[:8])) % len(d.ips)
+	hashValue := binary.BigEndian.Uint64(hash[:8])
+
+	// 确保索引为正数
+	index := int(hashValue % uint64(len(d.ips)))
+	if index < 0 {
+		index = -index % len(d.ips)
+	}
 
 	return d.ips[index], nil
 }
-

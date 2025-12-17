@@ -79,4 +79,3 @@ func VerifySubscription(cfg *SubscriptionConfig) error {
 	}
 	return nil
 }
-

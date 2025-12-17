@@ -11,6 +11,7 @@ import (
 
 	"multiexit-proxy/internal/config"
 	"multiexit-proxy/internal/subscribe"
+
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
@@ -42,17 +43,17 @@ func (s *Server) setupRoutes() {
 	// API路由
 	api := s.router.PathPrefix("/api").Subrouter()
 	api.Use(s.authMiddleware)
-	
+
 	api.HandleFunc("/config", s.getConfig).Methods("GET")
 	api.HandleFunc("/config", s.updateConfig).Methods("POST")
 	api.HandleFunc("/ips", s.getIPs).Methods("GET")
 	api.HandleFunc("/status", s.getStatus).Methods("GET")
 	api.HandleFunc("/stats", s.getStats).Methods("GET")
-	
+
 	// 订阅相关路由（不需要认证）
 	s.router.HandleFunc("/api/subscribe", s.handleSubscribe).Methods("GET")
 	s.router.HandleFunc("/api/subscription/link", s.generateSubscribeLink).Methods("GET")
-	
+
 	// 静态文件 - 尝试从嵌入的文件系统读取，失败则从文件系统读取
 	s.router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
@@ -139,9 +140,9 @@ func (s *Server) getIPs(w http.ResponseWriter, r *http.Request) {
 // getStatus 获取状态
 func (s *Server) getStatus(w http.ResponseWriter, r *http.Request) {
 	type Status struct {
-		Running    bool   `json:"running"`
-		Version    string `json:"version"`
-		Connections int   `json:"connections"`
+		Running     bool   `json:"running"`
+		Version     string `json:"version"`
+		Connections int    `json:"connections"`
 	}
 
 	status := Status{
@@ -157,9 +158,9 @@ func (s *Server) getStatus(w http.ResponseWriter, r *http.Request) {
 // getStats 获取统计信息
 func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 	type Stats struct {
-		TotalConnections int64             `json:"total_connections"`
-		IPStats          map[string]int64  `json:"ip_stats"`
-		Bandwidth        map[string]int64  `json:"bandwidth"`
+		TotalConnections int64            `json:"total_connections"`
+		IPStats          map[string]int64 `json:"ip_stats"`
+		Bandwidth        map[string]int64 `json:"bandwidth"`
 	}
 
 	stats := Stats{
@@ -175,7 +176,7 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 // handleSubscribe 处理订阅请求
 func (s *Server) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
-	
+
 	// 验证token（简单验证，可以改为更复杂的机制）
 	if token == "" || !s.validateSubscribeToken(token) {
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
@@ -220,7 +221,7 @@ func (s *Server) generateSubscribeLink(w http.ResponseWriter, r *http.Request) {
 
 	// 生成token（这里简化处理，实际应该生成随机token）
 	token := s.generateToken()
-	
+
 	// 获取服务器地址
 	serverAddr := r.Host
 	port := "8080" // Web端口，实际应该从配置读取
@@ -237,7 +238,7 @@ func (s *Server) generateSubscribeLink(w http.ResponseWriter, r *http.Request) {
 
 	// 生成订阅链接（使用Web管理端口）
 	link := fmt.Sprintf("http://%s:%s/api/subscribe?token=%s", serverAddr, port, token)
-	
+
 	type LinkResponse struct {
 		Token  string `json:"token"`
 		Link   string `json:"link"`

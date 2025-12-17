@@ -11,11 +11,11 @@ import (
 
 // RoutingManager 路由管理器
 type RoutingManager struct {
-	ips        []net.IP
-	gateway    net.IP
-	iface      string
-	ipToMark   map[string]int
-	markToIP   map[int]net.IP
+	ips      []net.IP
+	gateway  net.IP
+	iface    string
+	ipToMark map[string]int
+	markToIP map[int]net.IP
 }
 
 // NewRoutingManager 创建路由管理器
@@ -140,4 +140,3 @@ func (r *RoutingManager) GetMarkForIP(ip net.IP) (int, error) {
 	}
 	return mark, nil
 }
-

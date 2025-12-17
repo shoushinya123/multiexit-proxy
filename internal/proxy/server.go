@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"time"
 
 	"multiexit-proxy/internal/protocol"
@@ -16,18 +17,25 @@ type Server struct {
 	config        *ServerConfig
 	cipher        *protocol.Cipher
 	ipSelector    snat.IPSelector
+	healthChecker *snat.IPHealthChecker
 	routingMgr    *snat.RoutingManager
 	listener      net.Listener
 }
 
 // ServerConfig 服务端配置（简化版，实际应从config包导入）
 type ServerConfig struct {
-	ListenAddr string
-	TLSConfig  *transport.ServerTLSConfig
-	AuthKey    string
-	ExitIPs    []string
-	Strategy   string
-	SNAT       struct {
+	ListenAddr    string
+	TLSConfig     *transport.ServerTLSConfig
+	AuthKey       string
+	ExitIPs       []string
+	Strategy      string
+	StrategyParam string // load_balanced策略参数：connections 或 traffic
+	HealthCheck   struct {
+		Enabled  bool
+		Interval time.Duration
+		Timeout  time.Duration
+	}
+	SNAT struct {
 		Enabled   bool
 		Gateway   string
 		Interface string
@@ -36,25 +44,66 @@ type ServerConfig struct {
 
 // NewServer 创建代理服务端
 func NewServer(config *ServerConfig) (*Server, error) {
-	// 创建加密器
+	// 创建加密器（优先使用AES-GCM硬件加速）
 	masterKey := protocol.DeriveKeyFromPSK(config.AuthKey)
-	cipher, err := protocol.NewCipher(masterKey)
+	cipher, err := protocol.NewCipher(masterKey, true) // true = 使用AES-GCM
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
 
-	// 创建IP选择器
-	var ipSelector snat.IPSelector
+	// 创建IP列表
+	ipList := make([]net.IP, 0, len(config.ExitIPs))
+	for _, ipStr := range config.ExitIPs {
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid IP address: %s", ipStr)
+		}
+		ipList = append(ipList, ip)
+	}
+
+	// 创建健康检查器（如果配置启用）
+	var healthChecker *snat.IPHealthChecker
+	if config.HealthCheck.Enabled && len(config.ExitIPs) > 0 {
+		checkInterval := config.HealthCheck.Interval
+		if checkInterval == 0 {
+			checkInterval = 30 * time.Second
+		}
+		checkTimeout := config.HealthCheck.Timeout
+		if checkTimeout == 0 {
+			checkTimeout = 5 * time.Second
+		}
+
+		healthChecker = snat.NewIPHealthChecker(ipList, checkInterval, checkTimeout)
+	}
+
+	// 创建基础IP选择器
+	var baseSelector snat.IPSelector
 	switch config.Strategy {
 	case "round_robin":
-		ipSelector, err = snat.NewRoundRobinSelector(config.ExitIPs)
+		baseSelector, err = snat.NewRoundRobinSelector(config.ExitIPs)
 	case "destination_based":
-		ipSelector, err = snat.NewDestinationBasedSelector(config.ExitIPs)
+		baseSelector, err = snat.NewDestinationBasedSelector(config.ExitIPs)
+	case "load_balanced":
+		strategyParam := config.StrategyParam
+		if strategyParam == "" {
+			strategyParam = "connections"
+		}
+		baseSelector, err = snat.NewLoadBalancedSelector(config.ExitIPs, strategyParam)
 	default:
-		ipSelector, err = snat.NewRoundRobinSelector(config.ExitIPs)
+		baseSelector, err = snat.NewRoundRobinSelector(config.ExitIPs)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create IP selector: %w", err)
+	}
+
+	// 创建健康感知的IP选择器（包装基础选择器）
+	var ipSelector snat.IPSelector
+	if healthChecker != nil {
+		ipSelector = snat.NewHealthAwareIPSelector(baseSelector, healthChecker, config.ExitIPs, config.Strategy, config.StrategyParam)
+		// 启动健康检查
+		go healthChecker.Start()
+	} else {
+		ipSelector = baseSelector
 	}
 
 	// 创建路由管理器
@@ -82,11 +131,12 @@ func NewServer(config *ServerConfig) (*Server, error) {
 	}
 
 	return &Server{
-		config:     config,
-		cipher:     cipher,
-		ipSelector: ipSelector,
-		routingMgr: routingMgr,
-		listener:   listener,
+		config:        config,
+		cipher:        cipher,
+		ipSelector:    ipSelector,
+		healthChecker: healthChecker,
+		routingMgr:    routingMgr,
+		listener:      listener,
 	}, nil
 }
 
@@ -104,6 +154,11 @@ func (s *Server) Start() error {
 
 // Stop 停止服务端
 func (s *Server) Stop() error {
+	// 停止健康检查
+	if s.healthChecker != nil {
+		s.healthChecker.Stop()
+	}
+
 	if s.routingMgr != nil {
 		s.routingMgr.Cleanup()
 	}
@@ -172,8 +227,10 @@ func (s *Server) handleConn(conn net.Conn) error {
 
 	// 选择出口IP
 	host, portStr, _ := net.SplitHostPort(targetAddr)
-	targetPort := 0
-	fmt.Sscanf(portStr, "%d", &targetPort)
+	targetPort, err := strconv.Atoi(portStr)
+	if err != nil {
+		return fmt.Errorf("invalid port: %w", err)
+	}
 
 	exitIP, err := s.ipSelector.SelectIP(host, targetPort)
 	if err != nil {
@@ -204,9 +261,12 @@ func (s *Server) handleConn(conn net.Conn) error {
 	}
 	defer targetConn.Close()
 
+	// 为每个连接创建独立的加密上下文（避免nonce冲突，提升并发性能）
+	connCipher := protocol.NewConnectionCipher(s.cipher)
+
 	// 发送成功响应（加密）
 	response := []byte{0x00} // 成功
-	encryptedResp, err := s.cipher.Encrypt(response)
+	encryptedResp, err := connCipher.Encrypt(response)
 	if err != nil {
 		return err
 	}
@@ -218,11 +278,11 @@ func (s *Server) handleConn(conn net.Conn) error {
 	errCh := make(chan error, 2)
 
 	go func() {
-		errCh <- s.copyData(targetConn, conn, true)
+		errCh <- s.copyDataWithCipher(targetConn, conn, connCipher, true)
 	}()
 
 	go func() {
-		errCh <- s.copyData(conn, targetConn, false)
+		errCh <- s.copyDataWithCipher(conn, targetConn, connCipher, false)
 	}()
 
 	// 等待任一方向出错
@@ -230,23 +290,32 @@ func (s *Server) handleConn(conn net.Conn) error {
 	return err
 }
 
-// copyData 复制数据并加密/解密
+// copyData 复制数据并加密/解密（使用buffer池优化，保留用于兼容）
 func (s *Server) copyData(dst, src net.Conn, encrypt bool) error {
-	buf := make([]byte, 32*1024)
+	connCipher := protocol.NewConnectionCipher(s.cipher)
+	return s.copyDataWithCipher(dst, src, connCipher, encrypt)
+}
+
+// copyDataWithCipher 使用指定的加密上下文复制数据（连接级优化）
+func (s *Server) copyDataWithCipher(dst, src net.Conn, cipher *protocol.ConnectionCipher, encrypt bool) error {
+	// 从buffer池获取buffer
+	buf := bufferPool.Get().([]byte)
+	defer bufferPool.Put(buf)
+
 	for {
 		n, err := src.Read(buf)
 		if n > 0 {
 			var data []byte
 			if encrypt {
-				// 加密数据
-				encrypted, err := s.cipher.Encrypt(buf[:n])
+				// 加密数据（使用连接级加密上下文）
+				encrypted, err := cipher.Encrypt(buf[:n])
 				if err != nil {
 					return err
 				}
 				data = encrypted
 			} else {
 				// 解密数据
-				decrypted, err := s.cipher.Decrypt(buf[:n])
+				decrypted, err := cipher.Decrypt(buf[:n])
 				if err != nil {
 					return err
 				}
@@ -272,4 +341,3 @@ func abs(x int64) int64 {
 	}
 	return x
 }
-

@@ -36,5 +36,26 @@ logging:
   level: "info"
   file: "/var/log/multiexit-proxy.log"
 
+# 健康检查配置
+health_check:
+  enabled: true      # 启用健康检查
+  interval: "30s"    # 检查间隔（默认30秒）
+  timeout: "5s"      # 检查超时（默认5秒）
 
+# IP自动检测配置
+ip_detection:
+  enabled: true      # 启用IP自动检测
+  interface: ""      # 指定网络接口（如"eth0"），为空则检测所有接口
+
+# Web管理界面
+web:
+  enabled: true
+  listen: ":8080"
+  username: "admin"
+  password: "admin123"
+
+# Trojan协议支持（可选）
+trojan:
+  enabled: false
+  password: ""
 

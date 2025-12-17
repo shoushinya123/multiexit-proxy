@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"time"
 
 	"multiexit-proxy/internal/protocol"
@@ -28,9 +29,9 @@ type ClientConfig struct {
 
 // NewClient 创建代理客户端
 func NewClient(config *ClientConfig) (*Client, error) {
-	// 创建加密器
+	// 创建加密器（优先使用AES-GCM硬件加速）
 	masterKey := protocol.DeriveKeyFromPSK(config.AuthKey)
-	cipher, err := protocol.NewCipher(masterKey)
+	cipher, err := protocol.NewCipher(masterKey, true) // true = 使用AES-GCM
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
@@ -78,20 +79,23 @@ func (c *Client) handleLocalConn(localConn net.Conn) error {
 	}
 	defer serverConn.Close()
 
+	// 为每个连接创建独立的加密上下文（避免nonce冲突，提升并发性能）
+	connCipher := protocol.NewConnectionCipher(c.cipher)
+
 	// 发送握手消息
-	if err := c.sendHandshake(serverConn); err != nil {
+	if err := c.sendHandshakeWithCipher(serverConn, connCipher); err != nil {
 		c.sendSOCKS5Response(localConn, 0x05)
 		return err
 	}
 
 	// 发送连接请求
-	if err := c.sendConnectRequest(serverConn, addr); err != nil {
+	if err := c.sendConnectRequestWithCipher(serverConn, addr, connCipher); err != nil {
 		c.sendSOCKS5Response(localConn, 0x05)
 		return err
 	}
 
 	// 读取响应
-	response, err := c.readResponse(serverConn)
+	response, err := c.readResponseWithCipher(serverConn, connCipher)
 	if err != nil || response[0] != 0x00 {
 		c.sendSOCKS5Response(localConn, 0x05)
 		return fmt.Errorf("server rejected connection")
@@ -106,11 +110,11 @@ func (c *Client) handleLocalConn(localConn net.Conn) error {
 	errCh := make(chan error, 2)
 
 	go func() {
-		errCh <- c.copyData(serverConn, localConn, true)
+		errCh <- c.copyDataWithCipher(serverConn, localConn, connCipher, true)
 	}()
 
 	go func() {
-		errCh <- c.copyData(localConn, serverConn, false)
+		errCh <- c.copyDataWithCipher(localConn, serverConn, connCipher, false)
 	}()
 
 	err = <-errCh
@@ -125,8 +129,13 @@ func (c *Client) connectToServer() (net.Conn, error) {
 	return transport.DialTLS("tcp", c.config.ServerAddr, tlsConfig)
 }
 
-// sendHandshake 发送握手消息
+// sendHandshake 发送握手消息（保留用于兼容）
 func (c *Client) sendHandshake(conn net.Conn) error {
+	return c.sendHandshakeWithCipher(conn, protocol.NewConnectionCipher(c.cipher))
+}
+
+// sendHandshakeWithCipher 使用指定的加密上下文发送握手消息
+func (c *Client) sendHandshakeWithCipher(conn net.Conn, cipher *protocol.ConnectionCipher) error {
 	nonce := make([]byte, 16)
 	rand.Read(nonce)
 
@@ -138,13 +147,13 @@ func (c *Client) sendHandshake(conn net.Conn) error {
 		Timestamp: time.Now().Unix(),
 	}
 
-	// 计算HMAC
+	// 计算HMAC（使用主cipher）
 	handshakeData := protocol.EncodeHandshake(handshake)
 	handshake.HMAC = [4]byte(c.cipher.ComputeHMAC(handshakeData[:28]))
 
-	// 加密并发送
+	// 加密并发送（使用连接级加密上下文）
 	encrypted := protocol.EncodeHandshake(handshake)
-	ciphertext, err := c.cipher.Encrypt(encrypted)
+	ciphertext, err := cipher.Encrypt(encrypted)
 	if err != nil {
 		return err
 	}
@@ -153,16 +162,24 @@ func (c *Client) sendHandshake(conn net.Conn) error {
 	return err
 }
 
-// sendConnectRequest 发送连接请求
+// sendConnectRequest 发送连接请求（保留用于兼容）
 func (c *Client) sendConnectRequest(conn net.Conn, addr string) error {
+	return c.sendConnectRequestWithCipher(conn, addr, protocol.NewConnectionCipher(c.cipher))
+}
+
+// sendConnectRequestWithCipher 使用指定的加密上下文发送连接请求
+func (c *Client) sendConnectRequestWithCipher(conn net.Conn, addr string, cipher *protocol.ConnectionCipher) error {
 	addrType, address, err := protocol.ParseAddress(addr)
 	if err != nil {
 		return err
 	}
 
 	_, portStr, _ := net.SplitHostPort(addr)
-	var port uint16
-	fmt.Sscanf(portStr, "%d", &port)
+	portInt, err := strconv.Atoi(portStr)
+	if err != nil {
+		return fmt.Errorf("invalid port: %w", err)
+	}
+	port := uint16(portInt)
 
 	req := &protocol.ConnectRequest{
 		Type:     protocol.MsgTypeConnect,
@@ -173,7 +190,7 @@ func (c *Client) sendConnectRequest(conn net.Conn, addr string) error {
 	}
 
 	reqData := protocol.EncodeConnectRequest(req)
-	ciphertext, err := c.cipher.Encrypt(reqData)
+	ciphertext, err := cipher.Encrypt(reqData)
 	if err != nil {
 		return err
 	}
@@ -182,15 +199,20 @@ func (c *Client) sendConnectRequest(conn net.Conn, addr string) error {
 	return err
 }
 
-// readResponse 读取响应
+// readResponse 读取响应（保留用于兼容）
 func (c *Client) readResponse(conn net.Conn) ([]byte, error) {
+	return c.readResponseWithCipher(conn, protocol.NewConnectionCipher(c.cipher))
+}
+
+// readResponseWithCipher 使用指定的加密上下文读取响应
+func (c *Client) readResponseWithCipher(conn net.Conn, cipher *protocol.ConnectionCipher) ([]byte, error) {
 	buf := make([]byte, 1024)
 	n, err := conn.Read(buf)
 	if err != nil {
 		return nil, err
 	}
 
-	plaintext, err := c.cipher.Decrypt(buf[:n])
+	plaintext, err := cipher.Decrypt(buf[:n])
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +223,7 @@ func (c *Client) readResponse(conn net.Conn) ([]byte, error) {
 // readSOCKS5Request 读取SOCKS5请求（简化版）
 func (c *Client) readSOCKS5Request(conn net.Conn) (string, error) {
 	buf := make([]byte, 256)
-	
+
 	// 读取版本和方法
 	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
 		return "", err
@@ -271,23 +293,31 @@ func (c *Client) sendSOCKS5Response(conn net.Conn, reply byte) error {
 	return err
 }
 
-// copyData 复制数据并加密/解密
+// copyData 复制数据并加密/解密（使用buffer池优化，保留用于兼容）
 func (c *Client) copyData(dst, src net.Conn, encrypt bool) error {
-	buf := make([]byte, 32*1024)
+	return c.copyDataWithCipher(dst, src, protocol.NewConnectionCipher(c.cipher), encrypt)
+}
+
+// copyDataWithCipher 使用指定的加密上下文复制数据（连接级优化）
+func (c *Client) copyDataWithCipher(dst, src net.Conn, cipher *protocol.ConnectionCipher, encrypt bool) error {
+	// 从buffer池获取buffer
+	buf := bufferPool.Get().([]byte)
+	defer bufferPool.Put(buf)
+
 	for {
 		n, err := src.Read(buf)
 		if n > 0 {
 			var data []byte
 			if encrypt {
-				// 加密数据
-				encrypted, err := c.cipher.Encrypt(buf[:n])
+				// 加密数据（使用连接级加密上下文）
+				encrypted, err := cipher.Encrypt(buf[:n])
 				if err != nil {
 					return err
 				}
 				data = encrypted
 			} else {
 				// 解密数据
-				decrypted, err := c.cipher.Decrypt(buf[:n])
+				decrypted, err := cipher.Decrypt(buf[:n])
 				if err != nil {
 					return err
 				}
@@ -306,4 +336,3 @@ func (c *Client) copyData(dst, src net.Conn, encrypt bool) error {
 		}
 	}
 }
-

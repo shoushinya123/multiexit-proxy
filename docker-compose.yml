@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  multiexit-proxy:
+    build: .
+    container_name: multiexit-proxy
+    image: multiexit-proxy:latest
+    restart: unless-stopped
+    network_mode: host  # 使用host网络模式以便SNAT正常工作
+    cap_add:
+      - NET_ADMIN  # 需要此权限来配置iptables和路由
+      - SYS_ADMIN  # 可能需要用于某些网络操作
+    volumes:
+      - ./configs:/etc/multiexit-proxy:ro
+      - ./logs:/var/log/multiexit-proxy
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # 如果需要Docker网络集成
+    environment:
+      - TZ=Asia/Shanghai
+    command: ["./server", "-config", "/etc/multiexit-proxy/server.yaml"]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: Web UI with nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: multiexit-proxy-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/html:/usr/share/nginx/html:ro
+    depends_on:
+      - multiexit-proxy
+

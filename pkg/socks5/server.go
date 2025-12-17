@@ -23,11 +23,11 @@ const (
 	AddrTypeIPv6   = 0x04
 	AddrTypeDomain = 0x03
 
-	ReplySuccess           = 0x00
-	ReplyGeneralFailure    = 0x01
-	ReplyConnectionRefused = 0x05
+	ReplySuccess            = 0x00
+	ReplyGeneralFailure     = 0x01
+	ReplyConnectionRefused  = 0x05
 	ReplyNetworkUnreachable = 0x03
-	ReplyHostUnreachable   = 0x04
+	ReplyHostUnreachable    = 0x04
 )
 
 // Server SOCKS5服务器
@@ -93,9 +93,24 @@ func (s *Server) handleRequest(conn net.Conn) error {
 	}
 
 	cmd := buf[1]
-	if cmd != CmdConnect {
+	switch cmd {
+	case CmdConnect:
+		// 处理TCP连接
+		return s.handleConnect(conn)
+	case CmdUDP:
+		// 处理UDP关联请求
+		return s.HandleUDPRequest(conn)
+	default:
 		s.sendReply(conn, ReplyGeneralFailure, nil, 0)
 		return fmt.Errorf("unsupported command: %d", cmd)
+	}
+}
+
+// handleConnect 处理TCP连接请求
+func (s *Server) handleConnect(conn net.Conn) error {
+	buf := make([]byte, 4)
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		return err
 	}
 
 	// 读取地址
@@ -192,6 +207,3 @@ func (s *Server) sendReply(conn net.Conn, reply byte, addr net.IP, port uint16) 
 	_, err := conn.Write(buf)
 	return err
 }
-
-
-

@@ -83,7 +83,7 @@ func ListenTLS(network, addr string, config *ServerTLSConfig) (net.Listener, err
 
 		tlsConfig = &tls.Config{
 			Certificates: []tls.Certificate{cert},
-			NextProtos:    []string{"h2", "http/1.1"},
+			NextProtos:   []string{"h2", "http/1.1"},
 		}
 	} else {
 		// 生成自签名证书（用于测试）
@@ -94,7 +94,7 @@ func ListenTLS(network, addr string, config *ServerTLSConfig) (net.Listener, err
 
 		tlsConfig = &tls.Config{
 			Certificates: []tls.Certificate{cert},
-			NextProtos:    []string{"h2", "http/1.1"},
+			NextProtos:   []string{"h2", "http/1.1"},
 		}
 	}
 
@@ -114,6 +114,3 @@ func generateSelfSignedCert() (tls.Certificate, error) {
 	// 为了简化，我们返回一个错误，提示需要提供证书
 	return tls.Certificate{}, fmt.Errorf("certificate required, use Cert and Key in config")
 }
-
-
-

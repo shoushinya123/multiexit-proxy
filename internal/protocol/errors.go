@@ -9,6 +9,3 @@ var (
 	ErrEncryption     = errors.New("encryption error")
 	ErrDecryption     = errors.New("decryption error")
 )
-
-
-

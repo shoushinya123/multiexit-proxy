@@ -17,6 +17,3 @@ type NoIPAvailableError struct{}
 func (e *NoIPAvailableError) Error() string {
 	return "no IP available"
 }
-
-
-

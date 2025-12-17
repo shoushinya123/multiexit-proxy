@@ -24,30 +24,30 @@ const (
 
 // HandshakeMessage 握手消息 (32字节)
 type HandshakeMessage struct {
-	Version  uint8
-	Method   uint8
-	Reserved uint16
-	Nonce    [16]byte
+	Version   uint8
+	Method    uint8
+	Reserved  uint16
+	Nonce     [16]byte
 	Timestamp int64
-	HMAC     [4]byte
+	HMAC      [4]byte
 }
 
 // ConnectRequest 连接请求
 type ConnectRequest struct {
-	Type      uint8
-	AddrType  uint8
-	AddrLen   uint8
-	Address   []byte
-	Port      uint16
+	Type     uint8
+	AddrType uint8
+	AddrLen  uint8
+	Address  []byte
+	Port     uint16
 }
 
 // DataMessage 数据消息
 type DataMessage struct {
-	Type   uint8
+	Type     uint8
 	StreamID uint32
-	Length uint16
-	Data   []byte
-	HMAC   [4]byte
+	Length   uint16
+	Data     []byte
+	HMAC     [4]byte
 }
 
 // EncodeHandshake 编码握手消息
@@ -69,9 +69,9 @@ func DecodeHandshake(data []byte) (*HandshakeMessage, error) {
 	}
 
 	msg := &HandshakeMessage{
-		Version:  data[0],
-		Method:   data[1],
-		Reserved: binary.BigEndian.Uint16(data[2:4]),
+		Version:   data[0],
+		Method:    data[1],
+		Reserved:  binary.BigEndian.Uint16(data[2:4]),
 		Timestamp: int64(binary.BigEndian.Uint64(data[20:28])),
 	}
 	copy(msg.Nonce[:], data[4:20])
@@ -84,14 +84,14 @@ func DecodeHandshake(data []byte) (*HandshakeMessage, error) {
 func EncodeConnectRequest(req *ConnectRequest) []byte {
 	addrLen := len(req.Address)
 	totalLen := 1 + 1 + 1 + addrLen + 2 // type + addrType + addrLen + address + port
-	
+
 	buf := make([]byte, totalLen)
 	buf[0] = req.Type
 	buf[1] = req.AddrType
 	buf[2] = uint8(addrLen)
 	copy(buf[3:3+addrLen], req.Address)
 	binary.BigEndian.PutUint16(buf[3+addrLen:3+addrLen+2], req.Port)
-	
+
 	return buf
 }
 
@@ -124,7 +124,7 @@ func DecodeConnectRequest(data []byte) (*ConnectRequest, error) {
 func EncodeDataMessage(msg *DataMessage) []byte {
 	totalLen := 1 + 4 + 2 + len(msg.Data) + 4 // type + streamID + length + data + hmac
 	buf := make([]byte, totalLen)
-	
+
 	offset := 0
 	buf[offset] = msg.Type
 	offset++
@@ -135,7 +135,7 @@ func EncodeDataMessage(msg *DataMessage) []byte {
 	copy(buf[offset:offset+len(msg.Data)], msg.Data)
 	offset += len(msg.Data)
 	copy(buf[offset:offset+4], msg.HMAC[:])
-	
+
 	return buf
 }
 
@@ -196,4 +196,3 @@ func BuildAddress(addrType uint8, addr []byte, port uint16) string {
 	}
 	return net.JoinHostPort(host, fmt.Sprintf("%d", port))
 }
-

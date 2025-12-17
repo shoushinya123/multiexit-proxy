@@ -1,7 +1,0 @@
-#!/bin/bash
-# FunctionGraph入口文件
-# 根据华为云文档：https://support.huaweicloud.com/devg-functiongraph/functiongraph_02_0603.html
-
-# 启动HTTP服务器
-exec ./handler
-

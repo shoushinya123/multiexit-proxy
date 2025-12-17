@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -58,6 +59,19 @@ type ServerConfig struct {
 		Enabled  bool   `yaml:"enabled"`
 		Password string `yaml:"password"`
 	} `yaml:"trojan"`
+
+	// 健康检查配置
+	HealthCheck struct {
+		Enabled  bool   `yaml:"enabled"`
+		Interval string `yaml:"interval"`
+		Timeout  string `yaml:"timeout"`
+	} `yaml:"health_check"`
+
+	// IP自动检测配置
+	IPDetection struct {
+		Enabled   bool   `yaml:"enabled"`
+		Interface string `yaml:"interface"` // 指定网络接口，为空则检测所有接口
+	} `yaml:"ip_detection"`
 }
 
 // ClientConfig 客户端配置
@@ -96,6 +110,30 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	return &config, nil
 }
 
+// GetHealthCheckInterval 获取健康检查间隔
+func (c *ServerConfig) GetHealthCheckInterval() time.Duration {
+	if c.HealthCheck.Interval == "" {
+		return 30 * time.Second
+	}
+	d, err := time.ParseDuration(c.HealthCheck.Interval)
+	if err != nil {
+		return 30 * time.Second
+	}
+	return d
+}
+
+// GetHealthCheckTimeout 获取健康检查超时
+func (c *ServerConfig) GetHealthCheckTimeout() time.Duration {
+	if c.HealthCheck.Timeout == "" {
+		return 5 * time.Second
+	}
+	d, err := time.ParseDuration(c.HealthCheck.Timeout)
+	if err != nil {
+		return 5 * time.Second
+	}
+	return d
+}
+
 // LoadClientConfig 加载客户端配置
 func LoadClientConfig(path string) (*ClientConfig, error) {
 	data, err := os.ReadFile(path)
@@ -110,4 +148,3 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 
 	return &config, nil
 }
-
