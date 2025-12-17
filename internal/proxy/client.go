@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -10,13 +11,17 @@ import (
 
 	"multiexit-proxy/internal/protocol"
 	"multiexit-proxy/internal/transport"
+
+	"github.com/sirupsen/logrus"
 )
 
 // Client 代理客户端
 type Client struct {
-	config     *ClientConfig
-	cipher     *protocol.Cipher
-	serverConn net.Conn
+	config       *ClientConfig
+	cipher       *protocol.Cipher
+	serverConn   net.Conn
+	reconnectMgr *ReconnectManager
+	connPool     *ConnectionPool // 连接池（可选）
 }
 
 // ClientConfig 客户端配置
@@ -25,6 +30,13 @@ type ClientConfig struct {
 	SNI        string
 	AuthKey    string
 	LocalAddr  string
+	Reconnect  *ReconnectConfig // 重连配置
+	Pool       struct {
+		Enabled     bool
+		MaxSize     int
+		MaxIdle     int
+		IdleTimeout time.Duration
+	}
 }
 
 // NewClient 创建代理客户端
@@ -36,9 +48,53 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
 
+	// 创建重连管理器
+	var reconnectMgr *ReconnectManager
+	if config.Reconnect != nil {
+		reconnectMgr = NewReconnectManager(*config.Reconnect)
+	} else {
+		// 使用默认配置
+		reconnectMgr = NewReconnectManager(ReconnectConfig{
+			MaxRetries:    0, // 无限重试
+			InitialDelay:  1 * time.Second,
+			MaxDelay:      5 * time.Minute,
+			BackoffFactor: 2.0,
+			Jitter:        true,
+		})
+	}
+
+	// 创建连接池（如果启用）
+	var connPool *ConnectionPool
+	if config.Pool.Enabled {
+		maxSize := config.Pool.MaxSize
+		if maxSize == 0 {
+			maxSize = 10 // 默认值
+		}
+		maxIdle := config.Pool.MaxIdle
+		if maxIdle == 0 {
+			maxIdle = 5 // 默认值
+		}
+		idleTimeout := config.Pool.IdleTimeout
+		if idleTimeout == 0 {
+			idleTimeout = 5 * time.Minute // 默认值
+		}
+
+		dialFunc := func() (net.Conn, error) {
+			tlsConfig := &transport.ClientTLSConfig{
+				SNI: config.SNI,
+			}
+			return transport.DialTLS("tcp", config.ServerAddr, tlsConfig)
+		}
+
+		connPool = NewConnectionPool(dialFunc, maxSize, maxIdle, idleTimeout)
+		logrus.Info("Connection pool enabled for client")
+	}
+
 	return &Client{
-		config: config,
-		cipher: cipher,
+		config:       config,
+		cipher:       cipher,
+		reconnectMgr: reconnectMgr,
+		connPool:     connPool,
 	}, nil
 }
 
@@ -71,13 +127,47 @@ func (c *Client) handleLocalConn(localConn net.Conn) error {
 		return err
 	}
 
-	// 连接到服务端
-	serverConn, err := c.connectToServer()
-	if err != nil {
-		c.sendSOCKS5Response(localConn, 0x05) // 连接失败
-		return err
+	// 连接到服务端（带重连和连接池）
+	var serverConn net.Conn
+	// 使用可取消的上下文（支持超时和取消）
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// 如果启用了连接池，优先使用连接池
+	if c.connPool != nil {
+		pooledConn, err := c.connPool.Get(ctx)
+		if err == nil {
+			serverConn = pooledConn
+			defer func() {
+				// 连接使用完毕后归还到池中
+				if pooledConn, ok := serverConn.(*PooledConnection); ok {
+					c.connPool.Return(pooledConn)
+				} else {
+					serverConn.Close()
+				}
+			}()
+		} else {
+			// 连接池获取失败，回退到直接连接
+			logrus.Debugf("Failed to get connection from pool: %v, falling back to direct connection", err)
+		}
 	}
-	defer serverConn.Close()
+
+	// 如果没有使用连接池，使用重连管理器连接
+	if serverConn == nil {
+		err = c.reconnectMgr.Do(ctx, func() error {
+			conn, err := c.connectToServer()
+			if err != nil {
+				return err
+			}
+			serverConn = conn
+			return nil
+		})
+		if err != nil {
+			c.sendSOCKS5Response(localConn, 0x05) // 连接失败
+			return fmt.Errorf("failed to connect to server after retries: %w", err)
+		}
+		defer serverConn.Close()
+	}
 
 	// 为每个连接创建独立的加密上下文（避免nonce冲突，提升并发性能）
 	connCipher := protocol.NewConnectionCipher(c.cipher)

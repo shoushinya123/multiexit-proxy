@@ -14,6 +14,8 @@ type IPHealthChecker struct {
 	timeout       time.Duration
 	failedIPs     map[string]time.Time
 	healthyIPs    map[string]bool
+	failureCount  map[string]int // IP失败次数计数
+	retryThreshold int          // 重试阈值（连续失败N次才标记为不健康）
 	mu            sync.RWMutex
 	stopCh        chan struct{}
 	onIPFailed    func(ip net.IP)
@@ -31,12 +33,14 @@ type HealthCheckResult struct {
 // NewIPHealthChecker 创建IP健康检查器
 func NewIPHealthChecker(ips []net.IP, checkInterval, timeout time.Duration) *IPHealthChecker {
 	return &IPHealthChecker{
-		ips:           ips,
-		checkInterval: checkInterval,
-		timeout:       timeout,
-		failedIPs:     make(map[string]time.Time),
-		healthyIPs:    make(map[string]bool),
-		stopCh:        make(chan struct{}),
+		ips:            ips,
+		checkInterval:  checkInterval,
+		timeout:        timeout,
+		failedIPs:      make(map[string]time.Time),
+		healthyIPs:     make(map[string]bool),
+		failureCount:   make(map[string]int),
+		retryThreshold: 3, // 默认连续失败3次才标记为不健康
+		stopCh:         make(chan struct{}),
 	}
 }
 
@@ -98,7 +102,8 @@ func (h *IPHealthChecker) checkIP(ip net.IP) HealthCheckResult {
 	start := time.Now()
 	
 	// 使用TCP连接测试（更可靠）
-	ctx, cancel := context.WithTimeout(context.Background(), h.timeout)
+		// 使用带超时的上下文进行健康检查
+		ctx, cancel := context.WithTimeout(context.Background(), h.timeout)
 	defer cancel()
 
 	// 尝试连接常见的测试端口
@@ -155,7 +160,7 @@ func (h *IPHealthChecker) pingIP(ip net.IP) bool {
 	return true
 }
 
-// updateHealth 更新IP健康状态
+// updateHealth 更新IP健康状态（带重试机制）
 func (h *IPHealthChecker) updateHealth(result HealthCheckResult) {
 	ipStr := result.IP.String()
 	
@@ -165,6 +170,8 @@ func (h *IPHealthChecker) updateHealth(result HealthCheckResult) {
 	wasHealthy := h.healthyIPs[ipStr]
 	
 	if result.Healthy {
+		// IP健康，重置失败计数
+		h.failureCount[ipStr] = 0
 		h.healthyIPs[ipStr] = true
 		delete(h.failedIPs, ipStr)
 		
@@ -173,13 +180,20 @@ func (h *IPHealthChecker) updateHealth(result HealthCheckResult) {
 			h.onIPRecovered(result.IP)
 		}
 	} else {
-		h.healthyIPs[ipStr] = false
-		h.failedIPs[ipStr] = time.Now()
+		// IP失败，增加失败计数
+		h.failureCount[ipStr]++
 		
-		// IP故障
-		if wasHealthy && h.onIPFailed != nil {
-			h.onIPFailed(result.IP)
+		// 只有连续失败达到阈值才标记为不健康
+		if h.failureCount[ipStr] >= h.retryThreshold {
+			h.healthyIPs[ipStr] = false
+			h.failedIPs[ipStr] = time.Now()
+			
+			// IP故障（首次达到阈值时触发）
+			if wasHealthy && h.onIPFailed != nil {
+				h.onIPFailed(result.IP)
+			}
 		}
+		// 如果失败次数未达到阈值，保持健康状态（允许临时故障）
 	}
 }
 

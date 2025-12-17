@@ -5,7 +5,9 @@ import (
 	"net"
 	"os/exec"
 	"strconv"
+	"sync"
 
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
 
@@ -16,6 +18,7 @@ type RoutingManager struct {
 	iface    string
 	ipToMark map[string]int
 	markToIP map[int]net.IP
+	mu       sync.Mutex // 保护并发访问
 }
 
 // NewRoutingManager 创建路由管理器
@@ -54,16 +57,20 @@ func (r *RoutingManager) Setup() error {
 		cmd := exec.Command("ip", "route", "add", "default", "via", r.gateway.String(),
 			"table", strconv.Itoa(table), "src", ip.String())
 		if err := cmd.Run(); err != nil {
-			// 如果路由已存在，忽略错误
-			fmt.Printf("Warning: failed to add route for %s: %v\n", ip.String(), err)
+			// 如果路由已存在，记录警告但不返回错误
+			logrus.Warnf("Failed to add route for %s (table %d): %v (may already exist)", ip.String(), table, err)
+		} else {
+			logrus.Debugf("Added route for %s in table %d", ip.String(), table)
 		}
 
 		// 创建路由规则
 		cmd = exec.Command("ip", "rule", "add", "fwmark", strconv.Itoa(mark),
 			"table", strconv.Itoa(table))
 		if err := cmd.Run(); err != nil {
-			// 如果规则已存在，忽略错误
-			fmt.Printf("Warning: failed to add rule for mark %d: %v\n", mark, err)
+			// 如果规则已存在，记录警告但不返回错误
+			logrus.Warnf("Failed to add rule for mark %d (table %d): %v (may already exist)", mark, table, err)
+		} else {
+			logrus.Debugf("Added rule for mark %d in table %d", mark, table)
 		}
 
 		// 创建SNAT规则
@@ -80,6 +87,8 @@ func (r *RoutingManager) Setup() error {
 
 // Cleanup 清理路由规则
 func (r *RoutingManager) Cleanup() error {
+	var cleanupErrors []error
+
 	for i, ip := range r.ips {
 		mark := i + 1
 		table := 100 + i
@@ -88,17 +97,37 @@ func (r *RoutingManager) Cleanup() error {
 		cmd := exec.Command("iptables", "-t", "nat", "-D", "OUTPUT",
 			"-m", "mark", "--mark", strconv.Itoa(mark),
 			"-j", "SNAT", "--to-source", ip.String())
-		cmd.Run() // 忽略错误
+		if err := cmd.Run(); err != nil {
+			logrus.Warnf("Failed to delete SNAT rule for %s (mark %d): %v", ip.String(), mark, err)
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("SNAT rule cleanup for %s: %w", ip.String(), err))
+		} else {
+			logrus.Debugf("Deleted SNAT rule for %s (mark %d)", ip.String(), mark)
+		}
 
 		// 删除路由规则
 		cmd = exec.Command("ip", "rule", "del", "fwmark", strconv.Itoa(mark),
 			"table", strconv.Itoa(table))
-		cmd.Run() // 忽略错误
+		if err := cmd.Run(); err != nil {
+			logrus.Warnf("Failed to delete rule for mark %d (table %d): %v", mark, table, err)
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("rule cleanup for mark %d: %w", mark, err))
+		} else {
+			logrus.Debugf("Deleted rule for mark %d (table %d)", mark, table)
+		}
 
 		// 删除路由表
 		cmd = exec.Command("ip", "route", "del", "default", "via", r.gateway.String(),
 			"table", strconv.Itoa(table), "src", ip.String())
-		cmd.Run() // 忽略错误
+		if err := cmd.Run(); err != nil {
+			logrus.Warnf("Failed to delete route for %s (table %d): %v", ip.String(), table, err)
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("route cleanup for %s: %w", ip.String(), err))
+		} else {
+			logrus.Debugf("Deleted route for %s (table %d)", ip.String(), table)
+		}
+	}
+
+	if len(cleanupErrors) > 0 {
+		logrus.Warnf("Some cleanup operations failed, but continuing...")
+		// 不返回错误，因为清理失败不应该阻止程序退出
 	}
 
 	return nil

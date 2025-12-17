@@ -54,8 +54,27 @@ web:
   username: "admin"
   password: "admin123"
 
+# 监控统计配置
+monitor:
+  enabled: true
+
+# 连接管理配置
+connection:
+  read_timeout: "30s"      # 读取超时
+  write_timeout: "30s"     # 写入超时
+  idle_timeout: "300s"     # 空闲超时（5分钟）
+  dial_timeout: "10s"      # 连接超时
+  max_connections: 1000    # 最大并发连接数（0=无限制）
+  keep_alive: true         # 启用TCP KeepAlive
+  keep_alive_time: "30s"   # KeepAlive间隔
+
 # Trojan协议支持（可选）
 trojan:
   enabled: false
   password: ""
+
+# 地理位置选择配置
+geo_location:
+  enabled: true      # 启用基于地理位置的IP选择
+  api_url: ""        # 地理位置API URL（可选，默认使用ip-api.com）
 

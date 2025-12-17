@@ -4,10 +4,12 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"multiexit-proxy/internal/config"
 	"multiexit-proxy/internal/subscribe"
@@ -20,22 +22,82 @@ import (
 //go:embed static
 var staticFiles embed.FS
 
+// ProxyServer 代理服务器接口（用于获取统计信息）
+type ProxyServer interface {
+	GetStats() interface{} // 返回统计信息，可以是*monitor.ConnectionStats或nil
+}
+
 // Server Web管理服务器
 type Server struct {
-	config     *config.ServerConfig
-	configPath string
-	router     *mux.Router
+	config          *config.ServerConfig
+	configPath      string
+	router          *mux.Router
+	proxyServer     ProxyServer                         // 代理服务器实例（用于获取统计）
+	statsMgr        interface{ GetStats() interface{} } // 统计管理器（用于Prometheus）
+	versionMgr      *config.VersionManager              // 版本管理器
+	csrfProtection  *CSRFProtection                     // CSRF保护
+	loginProtection *LoginProtection                    // 登录保护
 }
 
 // NewServer 创建Web服务器
 func NewServer(configPath string, cfg *config.ServerConfig) *Server {
+	// 生成CSRF密钥（从配置密钥派生）
+	csrfSecret := []byte(cfg.Auth.Key)
+	if len(csrfSecret) < 32 {
+		// 如果密钥太短，使用默认值
+		csrfSecret = []byte("multiexit-proxy-csrf-secret-key-2024")
+	}
+
 	s := &Server{
-		config:     cfg,
-		configPath: configPath,
-		router:     mux.NewRouter(),
+		config:          cfg,
+		configPath:      configPath,
+		router:          mux.NewRouter(),
+		versionMgr:      config.NewVersionManager(configPath),
+		csrfProtection:  NewCSRFProtection(csrfSecret),
+		loginProtection: NewLoginProtection(5, 15*time.Minute), // 5次失败，阻止15分钟
+	}
+	// 加载版本列表
+	if err := s.versionMgr.LoadVersionList(); err != nil {
+		logrus.Warnf("Failed to load version list: %v", err)
 	}
 	s.setupRoutes()
 	return s
+}
+
+// SetProxyServer 设置代理服务器实例（用于获取统计信息）
+func (s *Server) SetProxyServer(proxy ProxyServer) {
+	s.proxyServer = proxy
+	if statsMgr, ok := proxy.(interface{ GetStats() interface{} }); ok {
+		s.statsMgr = statsMgr
+	}
+}
+
+// handlePrometheusMetrics 处理Prometheus指标请求
+func (s *Server) handlePrometheusMetrics(w http.ResponseWriter, r *http.Request) {
+	if s.statsMgr == nil {
+		http.Error(w, "Stats not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	stats := s.statsMgr.GetStats()
+	if stats == nil {
+		http.Error(w, "Stats not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// 使用monitor包的Prometheus导出器
+	// 这里简化处理，直接调用monitor包的函数
+	// 实际应该导入monitor包并使用NewPrometheusExporter
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	fmt.Fprintf(w, "# Prometheus metrics endpoint\n")
+	fmt.Fprintf(w, "# Use /api/stats for JSON format\n")
+	fmt.Fprintf(w, "# Full Prometheus support: use monitor.NewPrometheusExporter\n")
+
+	// 临时返回基本指标
+	if statsMap, ok := stats.(map[string]interface{}); ok {
+		fmt.Fprintf(w, "multiexit_proxy_total_connections %v\n", statsMap["total_connections"])
+		fmt.Fprintf(w, "multiexit_proxy_active_connections %v\n", statsMap["active_connections"])
+	}
 }
 
 // setupRoutes 设置路由
@@ -43,12 +105,23 @@ func (s *Server) setupRoutes() {
 	// API路由
 	api := s.router.PathPrefix("/api").Subrouter()
 	api.Use(s.authMiddleware)
+	api.Use(s.csrfMiddleware) // 添加CSRF保护
 
 	api.HandleFunc("/config", s.getConfig).Methods("GET")
 	api.HandleFunc("/config", s.updateConfig).Methods("POST")
+	api.HandleFunc("/config/rollback", s.rollbackConfig).Methods("POST")
+	api.HandleFunc("/config/versions", s.listConfigVersions).Methods("GET")
 	api.HandleFunc("/ips", s.getIPs).Methods("GET")
 	api.HandleFunc("/status", s.getStatus).Methods("GET")
 	api.HandleFunc("/stats", s.getStats).Methods("GET")
+	api.HandleFunc("/rules", s.getRules).Methods("GET")
+	api.HandleFunc("/rules", s.addRule).Methods("POST")
+	api.HandleFunc("/rules/{id}", s.updateRule).Methods("PUT")
+	api.HandleFunc("/rules/{id}", s.deleteRule).Methods("DELETE")
+	api.HandleFunc("/traffic", s.getTrafficAnalysis).Methods("GET")
+
+	// Prometheus指标端点（不需要认证）
+	s.router.HandleFunc("/metrics", s.handlePrometheusMetrics).Methods("GET")
 
 	// 订阅相关路由（不需要认证）
 	s.router.HandleFunc("/api/subscribe", s.handleSubscribe).Methods("GET")
@@ -74,17 +147,45 @@ func (s *Server) setupRoutes() {
 	})
 }
 
-// authMiddleware 认证中间件
+// authMiddleware 认证中间件（带登录保护）
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		clientIP := getClientIPFromRequest(r)
+
+		// 检查IP是否被阻止
+		if s.loginProtection.IsBlocked(clientIP) {
+			http.Error(w, "Too many failed login attempts. Please try again later.", http.StatusTooManyRequests)
+			return
+		}
+
 		username, password, ok := r.BasicAuth()
 		if !ok || username != s.config.Web.Username || password != s.config.Web.Password {
+			// 记录失败尝试
+			s.loginProtection.RecordFailedAttempt(clientIP)
 			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
+
+		// 登录成功，清除失败记录
+		s.loginProtection.RecordSuccess(clientIP)
 		next.ServeHTTP(w, r)
 	})
+}
+
+// getClientIPFromRequest 从请求中获取客户端IP
+func getClientIPFromRequest(r *http.Request) string {
+	// 检查X-Forwarded-For头（代理场景）
+	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
+		return ip
+	}
+	// 检查X-Real-IP头
+	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
+	// 使用RemoteAddr
+	host, _, _ := net.SplitHostPort(r.RemoteAddr)
+	return host
 }
 
 // getConfig 获取配置
@@ -101,6 +202,21 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 验证配置
+	if err := config.ValidateServerConfig(&newConfig); err != nil {
+		http.Error(w, fmt.Sprintf("Configuration validation failed: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// 保存配置版本
+	version, err := s.versionMgr.SaveVersion("Manual update via web interface")
+	if err != nil {
+		logrus.Warnf("Failed to save config version: %v", err)
+		// 继续执行，但不保证能回滚
+	} else {
+		logrus.Infof("Config version saved: %s", version)
+	}
+
 	// 保存配置到文件（YAML格式）
 	data, err := yaml.Marshal(newConfig)
 	if err != nil {
@@ -115,7 +231,12 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 
 	s.config = &newConfig
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	response := map[string]interface{}{
+		"status":  "success",
+		"version": version,
+		"message": "Config updated successfully",
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 // getIPs 获取IP列表
@@ -157,18 +278,26 @@ func (s *Server) getStatus(w http.ResponseWriter, r *http.Request) {
 
 // getStats 获取统计信息
 func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
-	type Stats struct {
-		TotalConnections int64            `json:"total_connections"`
-		IPStats          map[string]int64 `json:"ip_stats"`
-		Bandwidth        map[string]int64 `json:"bandwidth"`
+	if s.proxyServer == nil {
+		type Stats struct {
+			TotalConnections int64            `json:"total_connections"`
+			IPStats          map[string]int64 `json:"ip_stats"`
+			Bandwidth        map[string]int64 `json:"bandwidth"`
+		}
+
+		stats := Stats{
+			TotalConnections: 0,
+			IPStats:          make(map[string]int64),
+			Bandwidth:        make(map[string]int64),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(stats)
+		return
 	}
 
-	stats := Stats{
-		TotalConnections: 0,
-		IPStats:          make(map[string]int64),
-		Bandwidth:        make(map[string]int64),
-	}
-
+	// 从代理服务器获取实际统计
+	stats := s.proxyServer.GetStats()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }

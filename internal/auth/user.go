@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
 	"net"
 	"sync"
@@ -158,9 +159,10 @@ func (m *UserManager) ListUsers() []string {
 // hashPassword 哈希密码（使用Argon2）
 func hashPassword(password string) []byte {
 	salt := make([]byte, 16)
-	// 在生产环境中应该使用随机salt
-	for i := range salt {
-		salt[i] = byte(i)
+	// 使用crypto/rand生成随机salt
+	if _, err := rand.Read(salt); err != nil {
+		// 如果随机数生成失败，使用时间戳作为后备（不推荐但比固定salt好）
+		panic("failed to generate random salt: " + err.Error())
 	}
 	
 	hash := argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
