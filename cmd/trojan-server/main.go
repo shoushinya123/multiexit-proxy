@@ -119,4 +119,3 @@ func main() {
 		logrus.Fatalf("Server error: %v", err)
 	}
 }
-

@@ -114,3 +114,5 @@ func generateSelfSignedCert() (tls.Certificate, error) {
 	// 为了简化，我们返回一个错误，提示需要提供证书
 	return tls.Certificate{}, fmt.Errorf("certificate required, use Cert and Key in config")
 }
+
+

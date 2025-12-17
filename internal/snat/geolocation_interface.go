@@ -8,3 +8,5 @@ type GeoLocationServiceInterface interface {
 	GetLocationForHost(host string) (*GeoLocation, error)
 }
 
+
+

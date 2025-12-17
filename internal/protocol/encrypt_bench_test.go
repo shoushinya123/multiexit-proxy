@@ -10,18 +10,18 @@ import (
 func BenchmarkEncrypt_ChaCha20(b *testing.B) {
 	masterKey := make([]byte, KeySize)
 	rand.Read(masterKey)
-	
+
 	cipher, err := NewCipher(masterKey, false) // 使用ChaCha20
 	if err != nil {
 		b.Fatalf("Failed to create cipher: %v", err)
 	}
-	
+
 	data := make([]byte, 32*1024) // 32KB数据
 	rand.Read(data)
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, err := cipher.Encrypt(data)
 		if err != nil {
@@ -34,18 +34,18 @@ func BenchmarkEncrypt_ChaCha20(b *testing.B) {
 func BenchmarkEncrypt_AESGCM(b *testing.B) {
 	masterKey := make([]byte, KeySize)
 	rand.Read(masterKey)
-	
+
 	cipher, err := NewCipher(masterKey, true) // 使用AES-GCM
 	if err != nil {
 		b.Fatalf("Failed to create cipher: %v", err)
 	}
-	
+
 	data := make([]byte, 32*1024) // 32KB数据
 	rand.Read(data)
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, err := cipher.Encrypt(data)
 		if err != nil {
@@ -58,19 +58,19 @@ func BenchmarkEncrypt_AESGCM(b *testing.B) {
 func BenchmarkDecrypt_ChaCha20(b *testing.B) {
 	masterKey := make([]byte, KeySize)
 	rand.Read(masterKey)
-	
+
 	cipher, err := NewCipher(masterKey, false)
 	if err != nil {
 		b.Fatalf("Failed to create cipher: %v", err)
 	}
-	
+
 	data := make([]byte, 32*1024)
 	rand.Read(data)
 	ciphertext, _ := cipher.Encrypt(data)
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, err := cipher.Decrypt(ciphertext)
 		if err != nil {
@@ -83,19 +83,19 @@ func BenchmarkDecrypt_ChaCha20(b *testing.B) {
 func BenchmarkDecrypt_AESGCM(b *testing.B) {
 	masterKey := make([]byte, KeySize)
 	rand.Read(masterKey)
-	
+
 	cipher, err := NewCipher(masterKey, true)
 	if err != nil {
 		b.Fatalf("Failed to create cipher: %v", err)
 	}
-	
+
 	data := make([]byte, 32*1024)
 	rand.Read(data)
 	ciphertext, _ := cipher.Encrypt(data)
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, err := cipher.Decrypt(ciphertext)
 		if err != nil {
@@ -108,16 +108,16 @@ func BenchmarkDecrypt_AESGCM(b *testing.B) {
 func BenchmarkConnectionCipher(b *testing.B) {
 	masterKey := make([]byte, KeySize)
 	rand.Read(masterKey)
-	
+
 	mainCipher, _ := NewCipher(masterKey, true)
 	connCipher := NewConnectionCipher(mainCipher)
-	
+
 	data := make([]byte, 32*1024)
 	rand.Read(data)
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, err := connCipher.Encrypt(data)
 		if err != nil {
@@ -130,19 +130,19 @@ func BenchmarkConnectionCipher(b *testing.B) {
 func BenchmarkEncrypt_DifferentSizes(b *testing.B) {
 	masterKey := make([]byte, KeySize)
 	rand.Read(masterKey)
-	
+
 	cipher, _ := NewCipher(masterKey, true)
-	
+
 	sizes := []int{1 * 1024, 8 * 1024, 32 * 1024, 64 * 1024}
-	
+
 	for _, size := range sizes {
 		data := make([]byte, size)
 		rand.Read(data)
-		
+
 		b.Run(fmt.Sprintf("size_%dKB", size/1024), func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
-			
+
 			for i := 0; i < b.N; i++ {
 				_, err := cipher.Encrypt(data)
 				if err != nil {
@@ -152,4 +152,3 @@ func BenchmarkEncrypt_DifferentSizes(b *testing.B) {
 		})
 	}
 }
-

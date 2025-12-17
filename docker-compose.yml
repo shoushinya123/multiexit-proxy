@@ -1,6 +1,30 @@
 version: '3.8'
 
 services:
+  # PostgreSQL数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: multiexit-proxy-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: multiexit_proxy
+      POSTGRES_USER: multiexit
+      POSTGRES_PASSWORD: multiexit123
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U multiexit -d multiexit_proxy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - multiexit-network
+
   multiexit-proxy:
     build: .
     container_name: multiexit-proxy
@@ -16,6 +40,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # 如果需要Docker网络集成
     environment:
       - TZ=Asia/Shanghai
+      - DB_HOST=localhost
+      - DB_PORT=5432
+      - DB_NAME=multiexit_proxy
+      - DB_USER=multiexit
+      - DB_PASSWORD=multiexit123
     command: ["./server", "-config", "/etc/multiexit-proxy/server.yaml"]
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
@@ -23,6 +52,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   # Optional: Web UI with nginx reverse proxy
   nginx:
@@ -37,4 +69,14 @@ services:
       - ./nginx/html:/usr/share/nginx/html:ro
     depends_on:
       - multiexit-proxy
+    networks:
+      - multiexit-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  multiexit-network:
+    driver: bridge
 

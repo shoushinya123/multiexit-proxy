@@ -189,8 +189,10 @@ curl --socks5-hostname 127.0.0.1:1080 http://httpbin.org/ip
 
 ### Web管理界面
 
-访问: `http://YOUR_SERVER:8080`
+前端管理界面是独立的Next.js应用，默认运行在 `http://localhost:8081`
 
+- 后端API服务: `http://localhost:8080/api`
+- 前端管理界面: `http://localhost:8081`
 - 默认用户名: `admin`
 - 密码: 配置文件中的 `web.password`
 
@@ -200,9 +202,11 @@ curl --socks5-hostname 127.0.0.1:1080 http://httpbin.org/ip
 - 实时统计信息（连接数、流量、延迟）
 - 流量分析（按域名统计、趋势分析）
 - 规则引擎管理
-- 用户管理
 - 配置更新和版本回滚
+- 订阅管理
 - Prometheus指标查看
+
+**注意**: 后端只提供API服务，不再包含HTML页面。请使用独立的前端应用作为管理界面。
 
 ## 📋 IP分配策略
 

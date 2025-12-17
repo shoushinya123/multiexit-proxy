@@ -475,6 +475,11 @@ func (s *Server) GetTrafficAnalyzer() *monitor.TrafficAnalyzer {
 	return s.trafficAnalyzer
 }
 
+// GetRuleEngine 获取规则引擎（用于Web界面）
+func (s *Server) GetRuleEngine() *RuleEngine {
+	return s.ruleEngine
+}
+
 // handleConn 处理客户端连接
 func (s *Server) handleConn(conn net.Conn) error {
 	connStartTime := time.Now()

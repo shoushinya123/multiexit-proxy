@@ -12,117 +12,130 @@ import (
 // ServerConfig 服务端配置
 type ServerConfig struct {
 	Server struct {
-		Listen string `yaml:"listen"`
+		Listen string `yaml:"listen" json:"listen"`
 		TLS    struct {
-			Cert     string   `yaml:"cert"`
-			Key      string   `yaml:"key"`
-			SNIFake  bool     `yaml:"sni_fake"`
-			FakeSNIs []string `yaml:"fake_snis"`
-		} `yaml:"tls"`
-	} `yaml:"server"`
+			Cert     string   `yaml:"cert" json:"cert"`
+			Key      string   `yaml:"key" json:"key"`
+			SNIFake  bool     `yaml:"sni_fake" json:"sni_fake"`
+			FakeSNIs []string `yaml:"fake_snis" json:"fake_snis"`
+		} `yaml:"tls" json:"tls"`
+	} `yaml:"server" json:"server"`
 
 	Auth struct {
-		Method string `yaml:"method"`
-		Key    string `yaml:"key"`
-	} `yaml:"auth"`
+		Method string `yaml:"method" json:"method"`
+		Key    string `yaml:"key" json:"key"`
+	} `yaml:"auth" json:"auth"`
 
-	ExitIPs []string `yaml:"exit_ips"`
+	ExitIPs []string `yaml:"exit_ips" json:"exit_ips"`
 
 	Strategy struct {
-		Type       string `yaml:"type"`
+		Type       string `yaml:"type" json:"type"`
 		PortRanges []struct {
-			Range string `yaml:"range"`
-			IP    string `yaml:"ip"`
-		} `yaml:"port_ranges"`
-	} `yaml:"strategy"`
+			Range string `yaml:"range" json:"range"`
+			IP    string `yaml:"ip" json:"ip"`
+		} `yaml:"port_ranges" json:"port_ranges"`
+	} `yaml:"strategy" json:"strategy"`
 
 	SNAT struct {
-		Enabled   bool   `yaml:"enabled"`
-		Gateway   string `yaml:"gateway"`
-		Interface string `yaml:"interface"`
-	} `yaml:"snat"`
+		Enabled   bool   `yaml:"enabled" json:"enabled"`
+		Gateway   string `yaml:"gateway" json:"gateway"`
+		Interface string `yaml:"interface" json:"interface"`
+	} `yaml:"snat" json:"snat"`
 
 	Logging struct {
-		Level string `yaml:"level"`
-		File  string `yaml:"file"`
-	} `yaml:"logging"`
+		Level string `yaml:"level" json:"level"`
+		File  string `yaml:"file" json:"file"`
+	} `yaml:"logging" json:"logging"`
 
 	Web struct {
-		Enabled  bool   `yaml:"enabled"`
-		Listen   string `yaml:"listen"`
-		Username string `yaml:"username"`
-		Password string `yaml:"password"`
-	} `yaml:"web"`
+		Enabled  bool   `yaml:"enabled" json:"enabled"`
+		Listen   string `yaml:"listen" json:"listen"`
+		Username string `yaml:"username" json:"username"`
+		Password string `yaml:"password" json:"password"`
+	} `yaml:"web" json:"web"`
 
 	// Trojan协议支持
 	Trojan struct {
-		Enabled  bool   `yaml:"enabled"`
-		Password string `yaml:"password"`
-	} `yaml:"trojan"`
+		Enabled  bool   `yaml:"enabled" json:"enabled"`
+		Password string `yaml:"password" json:"password"`
+	} `yaml:"trojan" json:"trojan"`
 
 	// 健康检查配置
 	HealthCheck struct {
-		Enabled  bool   `yaml:"enabled"`
-		Interval string `yaml:"interval"`
-		Timeout  string `yaml:"timeout"`
-	} `yaml:"health_check"`
+		Enabled  bool   `yaml:"enabled" json:"enabled"`
+		Interval string `yaml:"interval" json:"interval"`
+		Timeout  string `yaml:"timeout" json:"timeout"`
+	} `yaml:"health_check" json:"health_check"`
 
 	// IP自动检测配置
 	IPDetection struct {
-		Enabled   bool   `yaml:"enabled"`
-		Interface string `yaml:"interface"` // 指定网络接口，为空则检测所有接口
-	} `yaml:"ip_detection"`
+		Enabled   bool   `yaml:"enabled" json:"enabled"`
+		Interface string `yaml:"interface" json:"interface"` // 指定网络接口，为空则检测所有接口
+	} `yaml:"ip_detection" json:"ip_detection"`
 
 	// 连接管理配置
 	Connection struct {
-		ReadTimeout    string `yaml:"read_timeout"`    // 读取超时
-		WriteTimeout   string `yaml:"write_timeout"`   // 写入超时
-		IdleTimeout    string `yaml:"idle_timeout"`    // 空闲超时
-		DialTimeout    string `yaml:"dial_timeout"`    // 连接超时
-		MaxConnections int    `yaml:"max_connections"` // 最大并发连接数
-		KeepAlive      bool   `yaml:"keep_alive"`      // 启用TCP KeepAlive
-		KeepAliveTime  string `yaml:"keep_alive_time"` // KeepAlive间隔
-	} `yaml:"connection"`
+		ReadTimeout    string `yaml:"read_timeout" json:"read_timeout"`       // 读取超时
+		WriteTimeout   string `yaml:"write_timeout" json:"write_timeout"`    // 写入超时
+		IdleTimeout    string `yaml:"idle_timeout" json:"idle_timeout"`      // 空闲超时
+		DialTimeout    string `yaml:"dial_timeout" json:"dial_timeout"`      // 连接超时
+		MaxConnections int    `yaml:"max_connections" json:"max_connections"` // 最大并发连接数
+		KeepAlive      bool   `yaml:"keep_alive" json:"keep_alive"`          // 启用TCP KeepAlive
+		KeepAliveTime  string `yaml:"keep_alive_time" json:"keep_alive_time"` // KeepAlive间隔
+	} `yaml:"connection" json:"connection"`
 
 	// 地理位置配置
 	GeoLocation struct {
-		Enabled         bool   `yaml:"enabled"`          // 启用地理位置选择
-		APIURL          string `yaml:"api_url"`          // 地理位置API URL（可选，默认使用ip-api.com）
-		LatencyOptimize bool   `yaml:"latency_optimize"` // 启用延迟优化
-	} `yaml:"geo_location"`
+		Enabled         bool   `yaml:"enabled" json:"enabled"`                   // 启用地理位置选择
+		APIURL          string `yaml:"api_url" json:"api_url"`                   // 地理位置API URL（可选，默认使用ip-api.com）
+		LatencyOptimize bool   `yaml:"latency_optimize" json:"latency_optimize"` // 启用延迟优化
+	} `yaml:"geo_location" json:"geo_location"`
 
 	// 规则引擎配置
 	Rules []struct {
-		Name        string   `yaml:"name"`
-		Priority    int      `yaml:"priority"`
-		MatchDomain []string `yaml:"match_domain"`
-		MatchIP     []string `yaml:"match_ip"`
-		MatchPort   []int    `yaml:"match_port"`
-		TargetIP    string   `yaml:"target_ip"`
-		Action      string   `yaml:"action"`
-		Enabled     bool     `yaml:"enabled"`
-	} `yaml:"rules"`
+		Name        string   `yaml:"name" json:"name"`
+		Priority    int      `yaml:"priority" json:"priority"`
+		MatchDomain []string `yaml:"match_domain" json:"match_domain"`
+		MatchIP     []string `yaml:"match_ip" json:"match_ip"`
+		MatchPort   []int    `yaml:"match_port" json:"match_port"`
+		TargetIP    string   `yaml:"target_ip" json:"target_ip"`
+		Action      string   `yaml:"action" json:"action"`
+		Enabled     bool     `yaml:"enabled" json:"enabled"`
+	} `yaml:"rules" json:"rules"`
 
 	// 集群配置
 	Cluster struct {
-		Enabled        bool     `yaml:"enabled"`
-		NodeID         string   `yaml:"node_id"`
-		Nodes          []string `yaml:"nodes"`         // 其他节点地址列表
-		LoadBalancer   string   `yaml:"load_balancer"` // "round_robin" or "least_connections"
-		HealthInterval string   `yaml:"health_interval"`
-	} `yaml:"cluster"`
+		Enabled        bool     `yaml:"enabled" json:"enabled"`
+		NodeID         string   `yaml:"node_id" json:"node_id"`
+		Nodes          []string `yaml:"nodes" json:"nodes"`                   // 其他节点地址列表
+		LoadBalancer   string   `yaml:"load_balancer" json:"load_balancer"`   // "round_robin" or "least_connections"
+		HealthInterval string   `yaml:"health_interval" json:"health_interval"`
+	} `yaml:"cluster" json:"cluster"`
 
 	// 流量分析配置
 	TrafficAnalysis struct {
-		Enabled          bool    `yaml:"enabled"`
-		TrendWindow      string  `yaml:"trend_window"`
-		AnomalyThreshold float64 `yaml:"anomaly_threshold"`
-	} `yaml:"traffic_analysis"`
+		Enabled          bool    `yaml:"enabled" json:"enabled"`
+		TrendWindow      string  `yaml:"trend_window" json:"trend_window"`
+		AnomalyThreshold float64 `yaml:"anomaly_threshold" json:"anomaly_threshold"`
+	} `yaml:"traffic_analysis" json:"traffic_analysis"`
 
 	// 监控统计配置
 	Monitor struct {
-		Enabled bool `yaml:"enabled"` // 启用统计
-	} `yaml:"monitor"`
+		Enabled bool `yaml:"enabled" json:"enabled"` // 启用统计
+	} `yaml:"monitor" json:"monitor"`
+
+	// 数据库配置
+	Database struct {
+		Enabled  bool   `yaml:"enabled" json:"enabled"`   // 启用数据库
+		Host     string `yaml:"host" json:"host"`      // 数据库主机
+		Port     int    `yaml:"port" json:"port"`      // 数据库端口
+		Database string `yaml:"database" json:"database"`  // 数据库名
+		User     string `yaml:"user" json:"user"`      // 用户名
+		Password string `yaml:"password" json:"password"`  // 密码
+		SSLMode  string `yaml:"ssl_mode" json:"ssl_mode"`  // SSL模式: disable, require, verify-ca, verify-full
+		MaxConns int    `yaml:"max_conns" json:"max_conns"` // 最大连接数
+		MaxIdle  int    `yaml:"max_idle" json:"max_idle"`  // 最大空闲连接数
+	} `yaml:"database" json:"database"`
 }
 
 // ClientConfig 客户端配置

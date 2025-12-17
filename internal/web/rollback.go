@@ -42,11 +42,15 @@ func (s *Server) rollbackConfig(w http.ResponseWriter, r *http.Request) {
 	s.config = cfg
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":  "success",
 		"version": req.Version,
 		"message": "Config rolled back successfully",
-	})
+	}); err != nil {
+		logrus.Errorf("Failed to encode rollback response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 // listConfigVersions 列出配置版本
@@ -54,9 +58,13 @@ func (s *Server) listConfigVersions(w http.ResponseWriter, r *http.Request) {
 	versions := s.versionMgr.ListVersions()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"versions": versions,
 		"count":    len(versions),
-	})
+	}); err != nil {
+		logrus.Errorf("Failed to encode config versions response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 

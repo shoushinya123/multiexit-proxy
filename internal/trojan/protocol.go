@@ -31,7 +31,7 @@ const (
 
 // Request Trojan连接请求
 type Request struct {
-	Command  byte   // 1=CONNECT, 3=UDP
+	Command  byte // 1=CONNECT, 3=UDP
 	Address  net.IP
 	Port     uint16
 	Domain   string
@@ -45,13 +45,13 @@ func NewHeader(password string) Header {
 	h := sha256.New224()
 	h.Write([]byte(password))
 	hash1 := h.Sum(nil)
-	
+
 	// 计算第二次SHA224（28字节）：密码 + hash1
 	h = sha256.New224()
 	h.Write([]byte(password))
 	h.Write(hash1)
 	hash2 := h.Sum(nil)
-	
+
 	// 拼接两次哈希结果（56字节）
 	var header Header
 	copy(header[:28], hash1)

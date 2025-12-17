@@ -37,3 +37,5 @@ func TestIPDetector_DetectAllPublicIPs(t *testing.T) {
 	t.Logf("Detected %d public IP(s): %v", len(ips), ips)
 }
 
+
+

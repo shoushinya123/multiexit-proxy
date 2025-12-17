@@ -18,6 +18,7 @@ require (
 	github.com/gaukas/godicttls v0.0.4 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
+	github.com/lib/pq v1.10.9 // indirect
 	github.com/quic-go/quic-go v0.37.4 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )

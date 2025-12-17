@@ -176,3 +176,4 @@ func benchmarkConnectionCipher(cipher *protocol.Cipher, data []byte) time.Durati
 	return elapsed / time.Duration(iterations)
 }
 
+
