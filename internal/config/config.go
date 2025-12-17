@@ -76,11 +76,11 @@ type ServerConfig struct {
 	// 连接管理配置
 	Connection struct {
 		ReadTimeout    string `yaml:"read_timeout" json:"read_timeout"`       // 读取超时
-		WriteTimeout   string `yaml:"write_timeout" json:"write_timeout"`    // 写入超时
-		IdleTimeout    string `yaml:"idle_timeout" json:"idle_timeout"`      // 空闲超时
-		DialTimeout    string `yaml:"dial_timeout" json:"dial_timeout"`      // 连接超时
+		WriteTimeout   string `yaml:"write_timeout" json:"write_timeout"`     // 写入超时
+		IdleTimeout    string `yaml:"idle_timeout" json:"idle_timeout"`       // 空闲超时
+		DialTimeout    string `yaml:"dial_timeout" json:"dial_timeout"`       // 连接超时
 		MaxConnections int    `yaml:"max_connections" json:"max_connections"` // 最大并发连接数
-		KeepAlive      bool   `yaml:"keep_alive" json:"keep_alive"`          // 启用TCP KeepAlive
+		KeepAlive      bool   `yaml:"keep_alive" json:"keep_alive"`           // 启用TCP KeepAlive
 		KeepAliveTime  string `yaml:"keep_alive_time" json:"keep_alive_time"` // KeepAlive间隔
 	} `yaml:"connection" json:"connection"`
 
@@ -107,8 +107,8 @@ type ServerConfig struct {
 	Cluster struct {
 		Enabled        bool     `yaml:"enabled" json:"enabled"`
 		NodeID         string   `yaml:"node_id" json:"node_id"`
-		Nodes          []string `yaml:"nodes" json:"nodes"`                   // 其他节点地址列表
-		LoadBalancer   string   `yaml:"load_balancer" json:"load_balancer"`   // "round_robin" or "least_connections"
+		Nodes          []string `yaml:"nodes" json:"nodes"`                 // 其他节点地址列表
+		LoadBalancer   string   `yaml:"load_balancer" json:"load_balancer"` // "round_robin" or "least_connections"
 		HealthInterval string   `yaml:"health_interval" json:"health_interval"`
 	} `yaml:"cluster" json:"cluster"`
 
@@ -126,15 +126,15 @@ type ServerConfig struct {
 
 	// 数据库配置
 	Database struct {
-		Enabled  bool   `yaml:"enabled" json:"enabled"`   // 启用数据库
-		Host     string `yaml:"host" json:"host"`      // 数据库主机
-		Port     int    `yaml:"port" json:"port"`      // 数据库端口
-		Database string `yaml:"database" json:"database"`  // 数据库名
-		User     string `yaml:"user" json:"user"`      // 用户名
-		Password string `yaml:"password" json:"password"`  // 密码
-		SSLMode  string `yaml:"ssl_mode" json:"ssl_mode"`  // SSL模式: disable, require, verify-ca, verify-full
+		Enabled  bool   `yaml:"enabled" json:"enabled"`     // 启用数据库
+		Host     string `yaml:"host" json:"host"`           // 数据库主机
+		Port     int    `yaml:"port" json:"port"`           // 数据库端口
+		Database string `yaml:"database" json:"database"`   // 数据库名
+		User     string `yaml:"user" json:"user"`           // 用户名
+		Password string `yaml:"password" json:"password"`   // 密码
+		SSLMode  string `yaml:"ssl_mode" json:"ssl_mode"`   // SSL模式: disable, require, verify-ca, verify-full
 		MaxConns int    `yaml:"max_conns" json:"max_conns"` // 最大连接数
-		MaxIdle  int    `yaml:"max_idle" json:"max_idle"`  // 最大空闲连接数
+		MaxIdle  int    `yaml:"max_idle" json:"max_idle"`   // 最大空闲连接数
 	} `yaml:"database" json:"database"`
 }
 
