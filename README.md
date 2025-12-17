@@ -1,537 +1,66 @@
-# MultiExit Proxy
+## MultiExit Proxy
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+一个高性能的多出口 IP 代理系统，支持 SNAT、多出口智能调度和可视化 Web 管理面板。
 
-一个高性能的多出口IP代理系统，支持SNAT源地址转换，允许客户端通过服务端的多个公网IP访问外网服务。系统采用TLS 1.3 + AES-GCM硬件加速加密，性能优化后吞吐量可达 **7-8 GB/s**。
+### 功能概览
 
-## 🌟 核心特性
+- **多出口 IP**: 支持多公网 IP，按轮询、规则、地理位置、流量等策略分配出口。
+- **协议支持**: SOCKS5、Trojan，支持 TCP/UDP。
+- **健康检查与流量分析**: 自动剔除故障出口，提供连接/流量统计与异常分析。
+- **Web 管理面板**: 通过浏览器管理配置、出口 IP、规则、版本回滚等。
+- **安全特性**: TLS 加密、CSRF 防护、登录保护、IP 黑白名单、速率限制等。
 
-### 🚀 核心功能
-- ✅ **多出口IP管理** - 支持多个公网IP，自动SNAT源地址转换
-- ✅ **智能IP分配** - 轮询、按目标、按端口、负载均衡、地理位置、规则引擎等多种策略
-- ✅ **高性能加密** - TLS 1.3 + AES-GCM硬件加速，性能提升 **5.8倍**
-- ✅ **UDP代理** - 完整支持SOCKS5 UDP ASSOCIATE
-- ✅ **Trojan协议** - 兼容标准Trojan协议，流量更隐蔽
+### 环境要求
 
-### 🛡️ 高级功能
-- ✅ **IP健康检查** - 自动检测故障IP并切换，支持重试阈值机制
-- ✅ **IP自动检测** - 自动识别服务器上的公网出口IP，无需手动配置
-- ✅ **智能IP切换** - 故障IP自动过滤，恢复后自动重新启用
-- ✅ **实时监控** - 连接数、流量、延迟实时统计
-- ✅ **流量分析** - 按域名统计、流量趋势分析、异常检测
-- ✅ **多用户认证** - Argon2密码哈希，安全的随机salt
-- ✅ **负载均衡** - 按连接数和流量智能分配
-- ✅ **DDoS防护** - 连接速率限制和自动阻止
-- ✅ **IP过滤** - 黑白名单支持
-- ✅ **速率限制** - 全局、按IP、按用户的连接和带宽限制
-- ✅ **配置热更新** - 无需重启服务更新配置
-- ✅ **配置版本管理** - 自动备份、版本控制、一键回滚
-- ✅ **零拷贝优化** - Linux splice支持，性能提升30-40%
-- ✅ **连接池** - 客户端连接复用，减少握手开销
-- ✅ **自动重连** - 指数退避重连机制，最大延迟限制
-- ✅ **规则引擎** - 基于域名、IP、端口的自定义路由规则
+- Go 1.21+
+- Node.js 20+ 和 npm / pnpm（用于前端）
+- 可选：本地 PostgreSQL（如需启用数据库相关统计）
 
-### 🔒 安全增强
-- ✅ **CSRF保护** - Web界面CSRF Token验证
-- ✅ **登录保护** - 防暴力破解，5次失败自动阻止15分钟
-- ✅ **连接超时管理** - 读写超时、空闲连接自动关闭、TCP KeepAlive
-- ✅ **优雅关闭** - 等待活跃连接完成，安全关闭服务
-- ✅ **证书验证** - 启动时验证TLS证书有效性
-
-### 🐳 部署和运维
-- ✅ **Docker支持** - 完整的容器化部署方案
-- ✅ **Web管理界面** - 可视化管理和监控，支持流量分析和规则管理
-- ✅ **订阅功能** - 支持订阅链接自动配置客户端
-- ✅ **自动化部署** - 一键部署脚本
-- ✅ **Prometheus集成** - 标准指标导出，支持Grafana可视化
-- ✅ **日志轮转** - 自动日志轮转，防止磁盘空间占用
-
-## 📊 性能指标
-
-### 优化效果
-- **加密吞吐量**: 7-8 GB/s (32KB数据包)
-- **性能提升**: 5.8倍 (相比优化前)
-- **CPU使用率**: 降低70%
-- **内存优化**: Buffer池化，减少GC压力
-
-### 基准测试结果
-```
-BenchmarkEncryptionThroughput/Size_32KB
-  614517 次/秒
-  4186 ns/op
-  7827.69 MB/s
-  16 B/op, 1 allocs/op
-```
-
-## 🏗️ 系统架构
-
-```
-┌──────────┐         ┌──────────────┐         ┌─────────────┐
-│  客户端   │────────▶│  代理服务端   │────────▶│  目标服务    │
-│ (Client) │  加密   │ (Proxy Svr)  │  SNAT   │ (Target)    │
-└──────────┘  隧道   └──────────────┘         └─────────────┘
-                        │
-                        │ 管理多个出口IP
-                        ▼
-                  ┌─────────────┐
-                  │  EIP Pool   │
-                  │ IP1, IP2... │
-                  └─────────────┘
-```
-
-### 数据流
-```
-应用数据 → 自定义协议 → AEAD加密 → TLS 1.3 → TCP
-```
-
-### 核心组件
-- **代理服务端** (`internal/proxy/server.go`) - 核心代理逻辑，连接管理，流量转发
-- **SNAT管理** (`internal/snat/`) - IP选择、路由管理、健康检查、地理位置选择
-- **协议层** (`internal/protocol/`) - 加密/解密、消息协议
-- **传输层** (`internal/transport/`) - TLS封装、流量混淆
-- **监控统计** (`internal/monitor/`) - 连接统计、流量分析、Prometheus导出
-- **Web界面** (`internal/web/`) - 管理界面、API接口、安全保护
-- **配置管理** (`internal/config/`) - 配置加载、热更新、版本管理、备份回滚
-
-## 🚀 快速开始
-
-### 方式1: Docker部署（推荐）
+### 后端启动
 
 ```bash
-# 1. 克隆仓库
-git clone https://github.com/YOUR_USERNAME/multiexit-proxy.git
-cd multiexit-proxy
-
-# 2. 配置
-cp configs/server.yaml.example configs/server.yaml
-# 编辑配置文件，设置IP和密钥
-
-# 3. 启动
-docker-compose up -d
-
-# 4. 查看日志
-docker-compose logs -f
+cd /Users/shoushinya/123123
+go run cmd/server/main.go -config configs/server.yaml
 ```
 
-### 方式2: 直接部署
+启动后：
+- API 监听：`http://localhost:8080`
+- 关键接口：`/api/status`, `/api/config`, `/api/ips`, `/api/rules`, `/api/traffic`
+
+### 前端启动
 
 ```bash
-# 1. 编译
-go build -o server ./cmd/server
-go build -o client ./cmd/client
-
-# 2. 配置服务端
-cp configs/server.yaml.example configs/server.yaml
-# 编辑配置文件，设置：
-#   - exit_ips: 你的公网IP列表
-#   - auth.key: 认证密钥
-#   - server.tls.cert/key: TLS证书路径
-#   - snat.gateway: 网关地址
-#   - snat.interface: 网络接口
-
-# 3. 运行服务端（需要root权限，用于SNAT配置）
-sudo ./server -config configs/server.yaml
-
-# 4. 配置客户端
-cp configs/client.json.example configs/client.json
-# 编辑配置文件，设置服务端地址和认证密钥
-
-# 5. 运行客户端
-./client -config configs/client.json
+cd /Users/shoushinya/123123/frontend-system-design
+npm install
+npm run dev -- -p 8081
 ```
 
-### 方式3: 自动化部署
+然后在浏览器访问：
+- 登录与面板：`http://localhost:8081`
+- 默认管理账号密码：在 `configs/server.yaml` 的 `web.username` / `web.password` 中配置（示例为 `admin` / `admin123`）。
 
-```bash
-# 1. 编译并打包
-./deploy-server.sh
+前端通过 Next.js `rewrites` 将 `/api/*` 代理到 `http://localhost:8080/api/*`，CSRF Token 会自动从后端获取并附加到请求中。
 
-# 2. 上传到服务器
-scp -r deploy/server/* root@YOUR_SERVER:/opt/multiexit-proxy/
+### 配置管理说明
 
-# 3. 在服务器上运行自动化部署
-ssh root@YOUR_SERVER
-cd /opt/multiexit-proxy
-chmod +x scripts/setup.sh
-sudo bash scripts/setup.sh
+- **配置加载**: 前端通过 `GET /api/config` 读取当前配置，并在页面中展示。
+- **配置保存**: 前端通过 `POST /api/config` 提交完整配置，后端会进行校验并写入配置文件，同时创建配置版本，支持回滚。
+- **出口 IP 管理**: 在「IP 管理」页面可以查看自动检测到的 IP 与配置中的 `exit_ips`，仅配置中的 IP 支持删除。
 
-# 4. 启动服务
-sudo systemctl start multiexit-proxy
-```
+### 一键开发脚本
 
-### 客户端使用
+仓库中保留了用于本地一键开发的脚本：
 
-#### 使用订阅链接（推荐）
-```bash
-./client -subscribe "http://YOUR_SERVER:8080/api/subscribe?token=YOUR_TOKEN"
-```
+- `start-dev.sh`：可选的开发启动脚本（如果你喜欢通过脚本一键启动后端/前端）。
+- `scripts/deploy.sh`：一键部署相关脚本（根据需要自行修改）。
 
-#### 使用配置文件
-```bash
-./client -config configs/client.json
-```
+其他 `.sh` 脚本已按要求移除，如需自定义部署流程，建议基于上述脚本自行扩展。
 
-#### 配置系统代理
-```bash
-# macOS/Linux
-export ALL_PROXY=socks5://127.0.0.1:1080
+### 贡献与问题反馈
 
-# Windows
-# 设置 → 网络和Internet → 代理 → 手动代理设置
-# SOCKS代理: 127.0.0.1:1080
-```
+- 提交 Pull Request 前，请确保：
+  - `go test ./...` 通过；
+  - 前端能在本地正常启动并完成基础操作（登录、查看配置、保存配置、查看 IP 与流量统计）。
+- Bug 反馈与新功能建议可以直接在 GitHub Issues 中提交。
 
-#### 测试代理
-```bash
-curl --socks5-hostname 127.0.0.1:1080 http://httpbin.org/ip
-```
 
-### Web管理界面
-
-前端管理界面是独立的Next.js应用，默认运行在 `http://localhost:8081`
-
-- 后端API服务: `http://localhost:8080/api`
-- 前端管理界面: `http://localhost:8081`
-- 默认用户名: `admin`
-- 密码: 配置文件中的 `web.password`
-
-功能包括:
-- 系统状态监控
-- IP管理和健康检查
-- 实时统计信息（连接数、流量、延迟）
-- 流量分析（按域名统计、趋势分析）
-- 规则引擎管理
-- 配置更新和版本回滚
-- 订阅管理
-- Prometheus指标查看
-
-**注意**: 后端只提供API服务，不再包含HTML页面。请使用独立的前端应用作为管理界面。
-
-## 📋 IP分配策略
-
-系统支持多种IP分配策略，并且**自动过滤不健康的IP**：
-
-1. **轮询策略 (Round Robin)** - 按连接顺序轮流使用各个健康IP
-2. **按目标地址 (Destination Based)** - 相同目标使用相同出口IP（仅健康IP）
-3. **按端口分配 (Port Based)** - 特定端口范围映射到特定IP
-4. **负载均衡 (Load Balanced)** - 按连接数或流量智能分配（仅健康IP）
-5. **地理位置选择 (Geo Location)** - 根据目标地理位置选择最近的出口IP
-6. **规则引擎 (Rule Engine)** - 基于域名、IP、端口的自定义路由规则
-
-配置示例：
-```yaml
-strategy:
-  type: "load_balanced"  # round_robin, destination_based, load_balanced
-  config:
-    method: "connections"  # 或 "traffic"
-
-# 健康检查配置（推荐启用）
-health_check:
-  enabled: true      # 启用健康检查
-  interval: "30s"    # 检查间隔
-  timeout: "5s"      # 检查超时（连续失败3次才标记为不健康）
-
-# IP自动检测配置（可选）
-ip_detection:
-  enabled: true      # 启用IP自动检测
-  interface: ""      # 指定网络接口（空=检测所有接口）
-
-# 地理位置选择配置（可选）
-geo_location:
-  enabled: true      # 启用基于地理位置的IP选择
-  api_url: ""        # 地理位置API URL（可选）
-  latency_optimize: false  # 启用延迟优化
-  db_path: ""        # MaxMind GeoIP数据库路径（可选）
-
-# 规则引擎配置（可选）
-rules:
-  - name: "block_example"
-    priority: 10
-    match_domain: ["example.com"]
-    action: "block"
-    enabled: true
-  - name: "route_google_to_ip1"
-    priority: 20
-    match_domain: ["google.com", "*.google.com"]
-    target_ip: "1.2.3.4"
-    action: "use_ip"
-    enabled: true
-```
-
-## 🔐 安全特性
-
-### 加密和认证
-- 🔐 **端到端加密** - TLS 1.3 + AES-GCM/ChaCha20-Poly1305
-- 🔑 **预共享密钥** - PSK认证机制
-- 🔐 **多用户认证** - Argon2密码哈希，使用安全的随机salt
-- 🔒 **密码安全** - 每个用户使用唯一的随机salt
-
-### 流量混淆
-- 🎭 **SNI伪装** - TLS握手时使用常见域名SNI（cloudflare.com, google.com等）
-- 📦 **包大小混淆** - 随机padding，调整包大小分布
-- ⏱️ **时间混淆** - 随机延迟，模拟正常请求模式
-- 🔌 **端口复用** - 服务端监听443端口（标准HTTPS端口）
-
-### 防护机制
-- 🛡️ **DDoS防护** - 连接速率限制和自动阻止
-- 🚫 **IP过滤** - 黑白名单支持
-- 🔒 **防重放攻击** - 时间戳 + 随机数验证
-- 🛡️ **速率限制** - 全局、按IP、按用户的连接数和带宽限制
-- 🔒 **CSRF保护** - Web界面CSRF Token验证
-- 🔒 **登录保护** - 防暴力破解，失败5次自动阻止15分钟
-- ⏱️ **连接超时管理** - 读写超时、空闲连接自动关闭、TCP KeepAlive
-- 🔄 **优雅关闭** - 等待活跃连接完成，安全关闭服务
-
-## 🔧 技术栈
-
-- **语言**: Go 1.21+
-- **加密**: TLS 1.3, AES-GCM (硬件加速), ChaCha20-Poly1305
-- **网络**: iptables + iproute2 (SNAT), Linux splice (零拷贝)
-- **协议**: 自定义协议 + SOCKS5, Trojan协议支持
-- **Web框架**: Gorilla Mux
-- **监控**: Prometheus + Grafana
-- **日志**: Logrus + Lumberjack (日志轮转)
-
-## 📦 项目结构
-
-```
-multiexit-proxy/
-├── cmd/                    # 可执行程序入口
-│   ├── client/            # 客户端入口
-│   ├── server/            # 服务端入口
-│   ├── trojan-client/     # Trojan客户端
-│   └── trojan-server/     # Trojan服务端
-├── internal/              # 内部包（不对外暴露）
-│   ├── auth/              # 用户认证（Argon2密码哈希）
-│   ├── config/            # 配置管理（热更新、版本管理、备份回滚）
-│   ├── logging/           # 日志轮转
-│   ├── monitor/           # 监控统计（连接、流量、Prometheus）
-│   ├── protocol/          # 协议实现（加密/解密）
-│   ├── proxy/             # 代理核心（零拷贝、连接池、限流）
-│   ├── security/          # 安全功能（DDoS防护、IP过滤）
-│   ├── snat/              # SNAT管理（IP选择、路由、健康检查、地理位置）
-│   ├── subscribe/         # 订阅功能
-│   ├── transport/         # 传输层（TLS、流量混淆）
-│   ├── trojan/            # Trojan协议实现
-│   └── web/               # Web管理界面（CSRF保护、登录保护）
-├── pkg/                   # 可重用包
-│   ├── socks5/            # SOCKS5协议实现
-│   └── subscribe/         # 订阅客户端
-├── configs/               # 配置文件示例
-├── deploy/                # 部署相关文件
-│   ├── server/            # 服务端部署文件
-│   ├── client/            # 客户端部署文件
-│   ├── prometheus/        # Prometheus配置
-│   └── grafana/           # Grafana仪表板
-├── tests/                 # 测试文件
-├── scripts/               # 部署脚本
-├── docker-compose.yml     # Docker Compose配置
-├── Dockerfile             # Docker镜像构建
-└── go.mod                 # Go模块定义
-```
-
-## ⚙️ 配置说明
-
-### 服务端配置 (`configs/server.yaml`)
-
-主要配置项：
-
-```yaml
-server:
-  listen: ":443"
-  tls:
-    cert: "/path/to/cert.pem"
-    key: "/path/to/key.pem"
-    sni_fake: true
-    fake_snis:
-      - "cloudflare.com"
-      - "google.com"
-
-auth:
-  method: "psk"
-  key: "your-secret-key"
-
-exit_ips:
-  - "1.2.3.4"
-  - "5.6.7.8"
-
-strategy:
-  type: "load_balanced"  # round_robin, destination_based, load_balanced
-
-health_check:
-  enabled: true
-  interval: "30s"
-  timeout: "5s"
-
-ip_detection:
-  enabled: true
-  interface: ""
-
-connection:
-  read_timeout: "30s"
-  write_timeout: "30s"
-  idle_timeout: "300s"
-  dial_timeout: "10s"
-  max_connections: 1000
-  keep_alive: true
-
-web:
-  enabled: true
-  listen: ":8080"
-  username: "admin"
-  password: "admin123"
-
-monitor:
-  enabled: true
-
-rate_limit:
-  enabled: true
-  global_max_connections: 1000
-  global_rate_limit: 100
-  ip_max_connections: 100
-  ip_rate_limit: 50
-```
-
-### 客户端配置 (`configs/client.json`)
-
-```json
-{
-  "server": {
-    "address": "your-server.com:443",
-    "sni": "cloudflare.com"
-  },
-  "auth": {
-    "key": "your-secret-key"
-  },
-  "local": {
-    "address": "127.0.0.1:1080"
-  },
-  "reconnect": {
-    "max_retries": 0,
-    "initial_delay": "1s",
-    "max_delay": "5m",
-    "backoff_factor": 2.0,
-    "jitter": true
-  },
-  "pool": {
-    "enabled": true,
-    "max_size": 10,
-    "max_idle": 5,
-    "idle_timeout": "5m"
-  }
-}
-```
-
-## 📈 监控和统计
-
-### Prometheus指标
-
-服务端提供 `/metrics` 端点，导出标准Prometheus指标：
-
-- `multiexit_proxy_total_connections` - 总连接数
-- `multiexit_proxy_active_connections` - 活跃连接数
-- `multiexit_proxy_bytes_up` - 上行流量（字节）
-- `multiexit_proxy_bytes_down` - 下行流量（字节）
-- `multiexit_proxy_ip_connections` - 按IP的连接数
-- `multiexit_proxy_ip_bandwidth` - 按IP的带宽
-
-### Grafana仪表板
-
-使用 `deploy/grafana/dashboard.json` 导入Grafana仪表板，可视化监控数据。
-
-### Web界面统计
-
-访问Web管理界面查看：
-- 实时连接统计
-- IP健康状态
-- 流量分析（按域名）
-- 流量趋势
-- 异常检测
-
-## 🔄 配置管理
-
-### 热更新
-
-通过Web界面或API更新配置，无需重启服务：
-
-```bash
-curl -X PUT http://admin:password@YOUR_SERVER:8080/api/config \
-  -H "Content-Type: application/json" \
-  -d @new-config.json
-```
-
-### 版本管理
-
-配置更新时自动创建备份版本，支持版本列表查看和一键回滚：
-
-```bash
-# 查看版本列表
-curl http://admin:password@YOUR_SERVER:8080/api/config/versions
-
-# 回滚到指定版本
-curl -X POST http://admin:password@YOUR_SERVER:8080/api/config/rollback \
-  -H "Content-Type: application/json" \
-  -d '{"version": "v1.2.3"}'
-```
-
-系统自动保留最近10个配置版本，旧版本自动清理。
-
-## 🧪 测试
-
-### 运行单元测试
-```bash
-go test ./...
-```
-
-### 运行集成测试
-```bash
-cd tests/integration
-go test
-```
-
-### 运行性能测试
-```bash
-cd tests/performance
-go test -bench=.
-```
-
-## 📝 开发
-
-### 构建
-
-```bash
-# 构建服务端
-go build -o server ./cmd/server
-
-# 构建客户端
-go build -o client ./cmd/client
-
-# 构建所有
-go build ./...
-```
-
-### 代码检查
-
-```bash
-# 格式化代码
-go fmt ./...
-
-# 静态分析
-go vet ./...
-
-# 运行测试
-go test ./...
-```
-
-## 🤝 贡献
-
-欢迎提交Issue和Pull Request！
-
-## 📄 许可证
-
-本项目采用 MIT 许可证。详情请参阅 [LICENSE](LICENSE) 文件。
-
-## 🙏 致谢
-
-感谢所有为这个项目做出贡献的开发者！
