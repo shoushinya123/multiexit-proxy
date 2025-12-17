@@ -63,3 +63,12 @@ deploy/
 # Temporary files
 tmp/
 temp/
+
+# Test and temporary files
+test-config.json
+test-results.md
+headers.txt
+server-output.log
+*.log
+/tmp/
+
